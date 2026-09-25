@@ -1,4 +1,5 @@
 import numpy as np
+import casadi as cs
 import matplotlib.pyplot as plt
 from lipm_model import create_lipm_ocp
 from gait_planner import GaitPlanner
@@ -250,8 +251,17 @@ def main():
         if step % 1 == 0:
             print(f"Step {step:02} | Pos: [{X_sim[0]:.2f}, {X_sim[1]:.2f}] | Theta: {np.rad2deg(X_sim[2]):.1f} deg | dt: {dt_chosen*1000:.1f} ms | Comp. time: {solve_time*1000:.1f} ms")
 
-        history_X.append(X_next_sim)
+        x_hist_step = np.copy(X_next_sim)
+        theta = X_next_sim[2]
+        vx_glob = X_next_sim[3]
+        vy_glob = X_next_sim[4]
+
+        x_hist_step[3] = vx_glob * np.cos(theta) + vy_glob * np.sin(theta)
+        x_hist_step[4] = -vx_glob * np.sin(theta) + vy_glob * np.cos(theta)
+
+        history_X.append(x_hist_step)
         history_U.append(u_apply)
+
 
         # Control if the robot reached the target, if so stop the simulation
         dist_to_target = np.linalg.norm(X_next_sim[0:2] - c_target)

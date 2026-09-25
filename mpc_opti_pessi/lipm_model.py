@@ -184,6 +184,10 @@ def create_lipm_ocp(
     def compute_constraints(x_curr, u_curr, c_next, theta_next, f0, f1, r_obstacle):
         mu = 0.8 # Friction coefficient
 
+        # Extract current states
+        theta = x_curr[2]
+        c_dot = x_curr[3:5]
+
         p0, p1 = x_curr[6:8], x_curr[8:10]
         p0_next, p1_next = u_curr[0:2], u_curr[2:4]
         a, b = u_curr[8:10], u_curr[10]
@@ -214,7 +218,11 @@ def create_lipm_ocp(
         # 4) Dynamic obstacle should be in the positive semiplane and distant at least r_obs
         eq_obs = cs.dot(a, y0_obs) + b - r_obstacle 
 
-        return cs.vertcat(h_dist0_curr, h_dist1_curr, h_dist0_next, h_dist1_next, fric0, fric1, eq_norm_a, eq_s[0], eq_s[1], eq_s[2], eq_s[3], eq_p[0], eq_p[1], eq_obs)
+        # 5) Compute the local velocities
+        v_loc_x = c_dot[0] * cs.cos(theta) + c_dot[1] * cs.sin(theta)
+        v_loc_y = -c_dot[0] * cs.sin(theta) + c_dot[1] * cs.cos(theta)
+
+        return cs.vertcat(h_dist0_curr, h_dist1_curr, h_dist0_next, h_dist1_next, fric0, fric1, eq_norm_a, eq_s[0], eq_s[1], eq_s[2], eq_s[3], eq_p[0], eq_p[1], eq_obs, v_loc_x, v_loc_y)
 
     # 1. Optimistic uses fixed nominal radius
     con_op = compute_constraints(x_op, u_op, c_next_op, theta_next_op, f0_op, f1_op, r_obs)
@@ -233,12 +241,14 @@ def create_lipm_ocp(
     max_ext_sq = 0.03
     lh_robot = [0.0, 0.0, 0.0, 0.0, -1e6, -1e6]
     lh_obs = [0.0, -1e6, -1e6, -1e6, -1e6, -1e6, -1e6, 0.0] 
-    lh = lh_robot + lh_obs
+    lh_vel = [-0.6, -0.3] 
+    lh = lh_robot + lh_obs + lh_vel
     ocp.constraints.lh = np.array(lh + lh)
     
     uh_robot = [max_ext_sq, max_ext_sq, max_ext_sq, max_ext_sq, 0.0, 0.0]
     uh_obs  = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1e6]
-    uh = uh_robot + uh_obs
+    uh_vel = [0.6, 0.3] 
+    uh = uh_robot + uh_obs + uh_vel
     ocp.constraints.uh = np.array(uh + uh)
 
     # Initial constraints (36 equations: 8 for u_diff == 0 + 28)
@@ -247,44 +257,46 @@ def create_lipm_ocp(
 
     # Constraints on States
     ocp.constraints.x0 = x_init
-    bnd_x = [-0.6, -0.3, -0.8, 0.0]
-    BND_X = [0.6, 0.3, 0.8, 100.0]
+    bnd_x = [-0.8, 0.0]
+    BND_X = [0.8, 100.0]
     ocp.constraints.lbx = np.array(bnd_x + bnd_x) 
     ocp.constraints.ubx = np.array(BND_X + BND_X)
-    ocp.constraints.idxbx = np.array([3, 4, 5, 10, 14, 15, 16, 21])
+    # theta_dot (5, 16) and time (10, 21)
+    ocp.constraints.idxbx = np.array([5, 10, 16, 21]) 
 
     # Soft Constraints (Slack Variables)
     # acados manage the soft constraints as SLACK VARIABLES
     # We have the soft constraint on the velocities (3) and on the distance from current and next step to hip
-    idxsh_14 = [0, 1, 2, 3, 7, 8, 9, 10, 11, 12, 13]
-    idxsh_28 = idxsh_14 + [i + 14 for i in idxsh_14]
-    ocp.constraints.idxsh = np.array(idxsh_28)
+    idxsh_branch = [0, 1, 2, 3, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    idxsh_total = idxsh_branch + [i + 16 for i in idxsh_branch]
+    ocp.constraints.idxsh = np.array(idxsh_total)
     # Skip the first 8 decoupling eqns for node 0
-    ocp.constraints.idxsh_0 = np.array([i + 8 for i in idxsh_28])
-    ocp.constraints.idxsbx = np.array([0, 1, 2, 4, 5, 6])
+    ocp.constraints.idxsh_0 = np.array([i + 8 for i in idxsh_total])
+    # theta_dot is now index 0 for op and 2 for pe
+    ocp.constraints.idxsbx = np.array([0, 2])
 
     # These are the weights for the limits (upper and lower) of soft constraints
     # Soft Weights (States first, then Nonlinear constraints)
-    Zu_sbx = [1e3]*3 + [1e3]*3
-    zu_sbx = [1e2]*3 + [1e2]*3
-    Zl_sbx = [1e3]*3 + [1e3]*3
-    zl_sbx = [1e2]*3 + [1e2]*3
+    Zu_sbx = [1e3]*2
+    zu_sbx = [1e2]*2
+    Zl_sbx = [1e3]*2
+    zl_sbx = [1e2]*2
 
-    Zu_sh = [1e4]*4 + [1e6]*7 + [1e4]*4 + [1e6]*7
-    zu_sh = [1e3]*4 + [1e5]*7 + [1e3]*4 + [1e5]*7
-    Zl_sh = [0.0]*4 + [0.0]*6 + [1e6] + [0.0]*4 + [0.0]*6 + [1e6]
-    zl_sh = [0.0]*4 + [0.0]*6 + [1e5] + [0.0]*4 + [0.0]*6 + [1e5]
+    Zu_sh_branch = [1e4]*4 + [1e6]*7 + [1e3]*2
+    zu_sh_branch = [1e3]*4 + [1e5]*7 + [1e2]*2
+    Zl_sh_branch = [0.0]*4 + [0.0]*6 + [1e6] + [1e3]*2
+    zl_sh_branch = [0.0]*4 + [0.0]*6 + [1e5] + [1e2]*2
 
-    ocp.cost.Zu = np.array(Zu_sbx + Zu_sh)
-    ocp.cost.zu = np.array(zu_sbx + zu_sh)
-    ocp.cost.Zl = np.array(Zl_sbx + Zl_sh)
-    ocp.cost.zl = np.array(zl_sbx + zl_sh)
+    ocp.cost.Zu = np.array(Zu_sbx + Zu_sh_branch + Zu_sh_branch)
+    ocp.cost.zu = np.array(zu_sbx + zu_sh_branch + zu_sh_branch)
+    ocp.cost.Zl = np.array(Zl_sbx + Zl_sh_branch + Zl_sh_branch)
+    ocp.cost.zl = np.array(zl_sbx + zl_sh_branch + zl_sh_branch)
 
     # Node 0 soft weights (states are fixed, only nonlinear active)
-    ocp.cost.Zu_0 = np.array(Zu_sh)
-    ocp.cost.zu_0 = np.array(zu_sh)
-    ocp.cost.Zl_0 = np.array(Zl_sh)
-    ocp.cost.zl_0 = np.array(zl_sh)
+    ocp.cost.Zu_0 = np.array(Zu_sh_branch + Zu_sh_branch)
+    ocp.cost.zu_0 = np.array(zu_sh_branch + zu_sh_branch)
+    ocp.cost.Zl_0 = np.array(Zl_sh_branch + Zl_sh_branch)
+    ocp.cost.zl_0 = np.array(zl_sh_branch + zl_sh_branch)
 
     # Constraint on Controls
     dt_min = 0.2 / 4.0 
