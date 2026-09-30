@@ -100,6 +100,20 @@ def create_lipm_ocp(
     hip0_expr_next_op = c_next_op + R_theta_op @ hip_offset0
     hip1_expr_next_op = c_next_op + R_theta_op @ hip_offset1
 
+    # --- Dynamic weights and alignment with velocity vector ---
+    k_dist = 1.0
+    dist_sq_op = (c_op[0] - c_target[0])**2 + (c_op[1] - c_target[1])**2
+    # epsilon will be 1 on the target and 0 when far from it
+    epsilon_op = 1.0 / (1.0 + k_dist * dist_sq_op)
+
+    # Use the weighted error instead of theta_err
+    theta_err_weighted_op = epsilon_op * (theta_op - theta_target)
+
+    # Weight the velocity (1-alpha)
+    v_loc_y_op = -c_dot_op[0] * cs.sin(theta_op) + c_dot_op[1] * cs.cos(theta_op)
+    v_loc_weighted_op = (1.0 - epsilon_op) * v_loc_y_op
+
+
     # COSTS
     delta_p0_move_op = p0_next_op - p0_op  # anti-skating
     delta_p1_move_op = p1_next_op - p1_op
@@ -108,10 +122,11 @@ def create_lipm_ocp(
 
     dt_nominal = 0.275 / 4.0 # We must fix a nominal value, otherwise the solver would sent it to zero to avoid errors
     cost_y_expr_op = cs.vertcat(
-        c_op, theta_op, c_dot_op, theta_dot_op, x_op[10],
+        c_op, theta_err_weighted_op, c_dot_op, theta_dot_op, x_op[10],
         delta_p0_move_op, delta_p1_move_op, 
         hip_err_0_op, hip_err_1_op, 
-        u_op[4] - 0.5, u_op[5:7], u_op[7] - dt_nominal
+        u_op[4] - 0.5, u_op[5:7], u_op[7] - dt_nominal,
+        v_loc_weighted_op
     )
     cost_y_expr_e_op = cs.vertcat(c_op, theta_op, c_dot_op, theta_dot_op, x_op[10])
 
@@ -128,37 +143,48 @@ def create_lipm_ocp(
     hip0_expr_next_pe = c_next_pe + R_theta_pe @ hip_offset0
     hip1_expr_next_pe = c_next_pe + R_theta_pe @ hip_offset1
 
+    dist_sq_pe = (c_pe[0] - c_target[0])**2 + (c_pe[1] - c_target[1])**2
+    epsilon_pe = 1.0 / (1.0 + k_dist * dist_sq_pe)
+    theta_err_weighted_pe = epsilon_pe * (theta_pe - theta_target)
+    v_loc_y_pe = -c_dot_pe[0] * cs.sin(theta_pe) + c_dot_pe[1] * cs.cos(theta_pe)
+    v_loc_weighted_pe = (1.0 - epsilon_pe) * v_loc_y_pe
+
     delta_p0_move_pe = p0_next_pe - p0_pe  
     delta_p1_move_pe = p1_next_pe - p1_pe
     hip_err_0_pe = p0_next_pe - hip0_expr_next_pe 
     hip_err_1_pe = p1_next_pe - hip1_expr_next_pe
 
     cost_y_expr_pe = cs.vertcat(
-        c_pe, theta_pe, c_dot_pe, theta_dot_pe, x_pe[10],
+        c_pe, theta_err_weighted_pe, c_dot_pe, theta_dot_pe, x_pe[10],
         delta_p0_move_pe, delta_p1_move_pe, 
         hip_err_0_pe, hip_err_1_pe, 
-        u_pe[4] - 0.5, u_pe[5:7], u_pe[7] - dt_nominal
+        u_pe[4] - 0.5, u_pe[5:7], u_pe[7] - dt_nominal,
+        v_loc_weighted_pe
     )
     cost_y_expr_e_pe = cs.vertcat(c_pe, theta_pe, c_dot_pe, theta_dot_pe, x_pe[10])
 
-    # Combine Expressions (38 elements for intermediate, 14 for terminal)
+    # Combine Expressions (40 elements for intermediate, 14 for terminal)
     # Define cost function: (y-y_ref).T W (y-y_ref)
     model.cost_y_expr = cs.vertcat(cost_y_expr_op, cost_y_expr_pe)
     model.cost_y_expr_e = cs.vertcat(cost_y_expr_e_op, cost_y_expr_e_pe)
 
     # Weights
     W_diag_op = [
-        10.0, 10.0, 10.0, 5.0, 5.0, 0.5, 1e-6, # Tracking + t
-        10.0, 10.0, 10.0, 10.0,         # Anti-Skating
-        500.0, 500.0, 500.0, 500.0,                 # Posture
-        0.5, 0.05, 0.05, 10.0               # Controls
+        10.0, 10.0,                 # 0,1: Tracking x, y
+        10.0,                       # 2: theta dynamic
+        5.0, 5.0,                   # 3,4: velocity x, y
+        0.5,                        # 5: Yaw rate
+        1e-6,                       # 6: Time
+        10.0, 10.0, 10.0, 10.0,     # 7-10: Anti-Skating
+        200.0, 200.0, 200.0, 200.0, # 11-14: Posture
+        0.5, 0.05, 0.05, 10.0,      # 15-18: Controls
+        500                         # 19: Velocity alignment
     ]
     # Regularization weight for the pessimistic branch to avoid null-space explosion
     W_diag_pe = [w * 1e-3 for w in W_diag_op] 
 
     W_end_op = W_diag_op[0:7]
     W_end_pe = W_diag_pe[0:7]
-
     
     ocp.cost.cost_type = 'NONLINEAR_LS'
     ocp.cost.cost_type_e = 'NONLINEAR_LS'
@@ -166,12 +192,13 @@ def create_lipm_ocp(
     ocp.cost.W_e = np.diag(W_end_op + W_end_pe)
 
     # Reference (Updated lengths)
-    y_ref = np.zeros(38)
+    y_ref = np.zeros(40)
     y_ref[:2] = c_target
-    y_ref[2] = theta_target
-    y_ref[19:21] = c_target
-    y_ref[21] = theta_target
+    # y_ref[2] = theta_target
+    y_ref[20:22] = c_target
+    # y_ref[21] = theta_target
     
+    # In terminal cost I must leave the theta_target elements because for the running I used epsilon which embeds the difference, for the terminal cost I don't
     y_ref_e = np.zeros(14)
     y_ref_e[:2] = c_target
     y_ref_e[2] = theta_target 
@@ -202,8 +229,8 @@ def create_lipm_ocp(
         h_dist0_next, h_dist1_next = cs.sumsqr(p0_next - h0_next), cs.sumsqr(p1_next - h1_next)
 
         # Friction constraints
-        fric0 = f0[0]**2 + f0[1]**2 - (mu * u_curr[4] * m * g)**2 + 1e-3
-        fric1 = f1[0]**2 + f1[1]**2 - (mu * (1.0 - u_curr[4]) * m * g)**2 + 1e-3
+        fric0 = f0[0]**2 + f0[1]**2 - (mu * (1.0 - u_curr[4]) * m * g)**2 + 1e-3
+        fric1 = f1[0]**2 + f1[1]**2 - (mu * u_curr[4] * m * g)**2 + 1e-3
 
         # Separating plane Constraints
         # 1) Compute the norm of a == 1
@@ -216,7 +243,7 @@ def create_lipm_ocp(
         eq_p = [cs.dot(a, p0_next) + b, cs.dot(a, p1_next) + b]  
 
         # 4) Dynamic obstacle should be in the positive semiplane and distant at least r_obs
-        eq_obs = cs.dot(a, y0_obs) + b - r_obstacle 
+        eq_obs = cs.dot(a, y0_obs) + b - (r_obstacle * (1 + 0.5))
 
         # 5) Compute the local velocities
         v_loc_x = c_dot[0] * cs.cos(theta) + c_dot[1] * cs.sin(theta)
@@ -312,7 +339,7 @@ def create_lipm_ocp(
     ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM'
     ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
     ocp.solver_options.integrator_type = 'DISCRETE'
-    ocp.solver_options.nlp_solver_type = 'SQP_RTI' 
-    ocp.solver_options.nlp_solver_max_iter = 100
+    ocp.solver_options.nlp_solver_type = 'SQP' 
+    ocp.solver_options.nlp_solver_max_iter = 5
 
     return AcadosOcpSolver(ocp)

@@ -38,10 +38,10 @@ def draw_robot(ax, c_x, c_y, theta, alpha=0.3):
 
 
 def main():
-    N_horizon = 7
+    N_horizon = 8
     sim_steps = 150
     c_target = np.array([2, 2])
-    theta_target = np.deg2rad(45)
+    theta_target = np.deg2rad(-25)
 
     # steps_per_phase indicates the numer of time steps after which the robot changes feet
     gait_planner = GaitPlanner(steps_per_phase=4)
@@ -77,7 +77,7 @@ def main():
 
 
     # Definition of the dynamic obstacle
-    obs_pos_init = np.array([0, 2])
+    obs_pos_init = np.array([1, 1])
     obs_r = 0.2
     obs_speed = 0.3
     y_dot_max = 0.3
@@ -126,11 +126,11 @@ def main():
             previous_phase = current_phase
 
 
-        yref = np.zeros(38)
+        yref = np.zeros(40)
         yref[0:2] = c_target
-        yref[2] = theta_target
-        yref[19:21] = c_target
-        yref[21] = theta_target
+        # yref[2] = theta_target
+        yref[20:22] = c_target
+        # yref[22] = theta_target
         
         yref_e = np.zeros(14)
         yref_e[0:2] = c_target
@@ -196,13 +196,12 @@ def main():
         time_hist.append(solve_time)
 
 
-
         # Extract the state and the control computed by the solver
         u_opt_22 = solver.get(0, 'u')
         X_next_22 = solver.get(1, 'x')
 
         # Check for the trajectory OP vs PE difference
-        if step == 30 and 1:
+        if step == 30 and 0:
             print(f"\n--- Trajectory OP vs PE (Step {step}) ---")
             for k in range(N_horizon + 1):
                 x_k = solver.get(k, 'x')
@@ -513,6 +512,93 @@ def main():
     ax.legend(loc='best')
     ax.grid(True)
     ax.axis('equal')
+
+
+
+
+
+    # --- PLOTTING TRAJECTORY WITH ROBOT SHAPE ---
+    traj = np.array(history_X)
+    traj_u = np.array(history_U) # Array dei controlli per estrarre la linea
+    
+    fig, ax = plt.subplots(figsize=(12, 8))
+    ax.plot(traj[:, 0], traj[:, 1], 'k--', label='CoM Trajectory', alpha=0.5)
+    ax.plot(c_target[0], c_target[1], 'rx', markersize=15, markeredgewidth=3, label='Target')
+
+    # Draw the footprint
+    style_map = {'FL': ('blue', '^'), 'FR': ('cyan', 'v'), 'RL': ('green', '<'), 'RR': ('orange', '>')}
+    for leg, pos_list in foot_positions_world.items():
+        if len(pos_list) > 0:
+            pos_arr = np.array(pos_list)
+            color, marker = style_map[leg]
+            ax.scatter(pos_arr[:, 0], pos_arr[:, 1], c=color, marker=marker, 
+                       label=f'Piede {leg}', s=90, edgecolors='black', alpha=0.8, zorder=3)
+
+    # Draw the shape of the robot every N step
+    draw_interval = 1
+    for i in range(0, len(traj), draw_interval):
+        # Highlight the first and last frame
+        alpha_val = 0.8 if (i == 0 or i >= len(traj) - draw_interval) else 0.2
+        draw_robot(ax, traj[i, 0], traj[i, 1], traj[i, 2], alpha=alpha_val)
+    # Draw also for the last step
+    draw_robot(ax, traj[-1, 0], traj[-1, 1], traj[-1, 2], alpha=0.9)
+    # Draw the obstacle
+    ax.plot(obs_pos[0], obs_pos[1], 'ro', markersize=6, label='Centro Ostacolo')
+    
+    # Scegliamo ogni quanti step disegnare ostacolo e linea per pulizia visiva (es. ogni 10 step)
+    step_interval = 10
+    dt_avg = 0.275 / 4.0 # Tempo medio di uno step
+
+    for i in range(0, len(traj), step_interval):
+        alpha_val = 0.1 + (i / len(traj)) * 0.3 # Più trasparente all'inizio, opaco alla fine
+        
+        # 1. Disegna l'ostacolo accumulato
+        t_accumulated = i * dt_avg
+        r_current = obs_r + y_dot_max * t_accumulated
+        circle = plt.Circle(
+            obs_pos, r_current, 
+            color='orange', alpha=alpha_val,
+            edgecolor='orange', linewidth=1, linestyle='--', fill=False
+        )
+        ax.add_patch(circle)
+        
+        # 2. Disegna la linea di separazione (a_x*x + a_y*y + b = 0)
+        if i < len(traj_u):
+            ax_line = traj_u[i, 8]
+            ay_line = traj_u[i, 9]
+            b_line = traj_u[i, 10]
+            
+            # Normalizziamo il vettore normale
+            norm_a = np.hypot(ax_line, ay_line)
+            if norm_a > 1e-5:
+                # Trova il punto della retta più vicino all'origine per centrare il segmento
+                x0 = -ax_line * b_line / (norm_a**2)
+                y0 = -ay_line * b_line / (norm_a**2)
+                
+                # Vettore direzione della retta (perpendicolare alla normale)
+                dir_x = -ay_line / norm_a
+                dir_y = ax_line / norm_a
+                
+                # Lunghezza del segmento visibile (es. 1.5 metri per lato dal centro)
+                L = 1.5 
+                ax.plot([x0 - L * dir_x, x0 + L * dir_x], 
+                        [y0 - L * dir_y, y0 + L * dir_y], 
+                        color='purple', linestyle='-.', linewidth=1.5, alpha=alpha_val)
+
+    # Elemento fittizio per aggiungere la linea di separazione alla legenda
+    ax.plot([], [], color='purple', linestyle='-.', linewidth=1.5, label='Linea di Separazione')
+
+    # Draw a small dot in the middle of the obstacle
+    ax.plot(obs_pos[0], obs_pos[1], 'rx')
+    ax.set_title('CoM Trajectory, Footprints, Shape, Orientation & Separation Line')
+    ax.set_xlabel('X [m]')
+    ax.set_ylabel('Y [m]')
+    ax.legend(loc='best')
+    ax.grid(True)
+    ax.axis('equal')
+
+
+
 
 
 

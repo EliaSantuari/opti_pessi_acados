@@ -153,7 +153,7 @@ void lipm_opti_pessi_acados_create_set_plan(ocp_nlp_plan_t* nlp_solver_plan, con
     *  plan
     ************************************************/
 
-    nlp_solver_plan->nlp_solver = SQP_RTI;
+    nlp_solver_plan->nlp_solver = SQP;
 
     nlp_solver_plan->ocp_qp_solver_plan.qp_solver = PARTIAL_CONDENSING_HPIPM;
     nlp_solver_plan->relaxed_ocp_qp_solver_plan.qp_solver = PARTIAL_CONDENSING_HPIPM;
@@ -465,7 +465,8 @@ void lipm_opti_pessi_acados_setup_nlp_in(lipm_opti_pessi_solver_capsule* capsule
         cost_scaling[4] = 0.05;
         cost_scaling[5] = 0.05;
         cost_scaling[6] = 0.05;
-        cost_scaling[7] = 1;
+        cost_scaling[7] = 0.05;
+        cost_scaling[8] = 1;
         for (int i = 0; i <= N; i++)
         {
             ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, i, "scaling", &cost_scaling[i]);
@@ -490,10 +491,8 @@ void lipm_opti_pessi_acados_setup_nlp_in(lipm_opti_pessi_solver_capsule* capsule
     // change only the non-zero elements:
     yref_0[0] = 2;
     yref_0[1] = 2;
-    yref_0[2] = 0.7853981633974483;
-    yref_0[19] = 2;
     yref_0[20] = 2;
-    yref_0[21] = 0.7853981633974483;
+    yref_0[21] = 2;
     ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, 0, "yref", yref_0);
     free(yref_0);
 
@@ -510,43 +509,43 @@ void lipm_opti_pessi_acados_setup_nlp_in(lipm_opti_pessi_solver_capsule* capsule
     W_0[8+(NY0) * 8] = 10;
     W_0[9+(NY0) * 9] = 10;
     W_0[10+(NY0) * 10] = 10;
-    W_0[11+(NY0) * 11] = 500;
-    W_0[12+(NY0) * 12] = 500;
-    W_0[13+(NY0) * 13] = 500;
-    W_0[14+(NY0) * 14] = 500;
+    W_0[11+(NY0) * 11] = 200;
+    W_0[12+(NY0) * 12] = 200;
+    W_0[13+(NY0) * 13] = 200;
+    W_0[14+(NY0) * 14] = 200;
     W_0[15+(NY0) * 15] = 0.5;
     W_0[16+(NY0) * 16] = 0.05;
     W_0[17+(NY0) * 17] = 0.05;
     W_0[18+(NY0) * 18] = 10;
-    W_0[19+(NY0) * 19] = 0.01;
+    W_0[19+(NY0) * 19] = 500;
     W_0[20+(NY0) * 20] = 0.01;
     W_0[21+(NY0) * 21] = 0.01;
-    W_0[22+(NY0) * 22] = 0.005;
+    W_0[22+(NY0) * 22] = 0.01;
     W_0[23+(NY0) * 23] = 0.005;
-    W_0[24+(NY0) * 24] = 0.0005;
-    W_0[25+(NY0) * 25] = 0.000000001;
-    W_0[26+(NY0) * 26] = 0.01;
+    W_0[24+(NY0) * 24] = 0.005;
+    W_0[25+(NY0) * 25] = 0.0005;
+    W_0[26+(NY0) * 26] = 0.000000001;
     W_0[27+(NY0) * 27] = 0.01;
     W_0[28+(NY0) * 28] = 0.01;
     W_0[29+(NY0) * 29] = 0.01;
-    W_0[30+(NY0) * 30] = 0.5;
-    W_0[31+(NY0) * 31] = 0.5;
-    W_0[32+(NY0) * 32] = 0.5;
-    W_0[33+(NY0) * 33] = 0.5;
-    W_0[34+(NY0) * 34] = 0.0005;
-    W_0[35+(NY0) * 35] = 0.00005;
+    W_0[30+(NY0) * 30] = 0.01;
+    W_0[31+(NY0) * 31] = 0.2;
+    W_0[32+(NY0) * 32] = 0.2;
+    W_0[33+(NY0) * 33] = 0.2;
+    W_0[34+(NY0) * 34] = 0.2;
+    W_0[35+(NY0) * 35] = 0.0005;
     W_0[36+(NY0) * 36] = 0.00005;
-    W_0[37+(NY0) * 37] = 0.01;
+    W_0[37+(NY0) * 37] = 0.00005;
+    W_0[38+(NY0) * 38] = 0.01;
+    W_0[39+(NY0) * 39] = 0.5;
     ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, 0, "W", W_0);
     free(W_0);
     double* yref = calloc(NY, sizeof(double));
     // change only the non-zero elements:
     yref[0] = 2;
     yref[1] = 2;
-    yref[2] = 0.7853981633974483;
-    yref[19] = 2;
     yref[20] = 2;
-    yref[21] = 0.7853981633974483;
+    yref[21] = 2;
 
     for (int i = 1; i < N; i++)
     {
@@ -566,33 +565,35 @@ void lipm_opti_pessi_acados_setup_nlp_in(lipm_opti_pessi_solver_capsule* capsule
     W[8+(NY) * 8] = 10;
     W[9+(NY) * 9] = 10;
     W[10+(NY) * 10] = 10;
-    W[11+(NY) * 11] = 500;
-    W[12+(NY) * 12] = 500;
-    W[13+(NY) * 13] = 500;
-    W[14+(NY) * 14] = 500;
+    W[11+(NY) * 11] = 200;
+    W[12+(NY) * 12] = 200;
+    W[13+(NY) * 13] = 200;
+    W[14+(NY) * 14] = 200;
     W[15+(NY) * 15] = 0.5;
     W[16+(NY) * 16] = 0.05;
     W[17+(NY) * 17] = 0.05;
     W[18+(NY) * 18] = 10;
-    W[19+(NY) * 19] = 0.01;
+    W[19+(NY) * 19] = 500;
     W[20+(NY) * 20] = 0.01;
     W[21+(NY) * 21] = 0.01;
-    W[22+(NY) * 22] = 0.005;
+    W[22+(NY) * 22] = 0.01;
     W[23+(NY) * 23] = 0.005;
-    W[24+(NY) * 24] = 0.0005;
-    W[25+(NY) * 25] = 0.000000001;
-    W[26+(NY) * 26] = 0.01;
+    W[24+(NY) * 24] = 0.005;
+    W[25+(NY) * 25] = 0.0005;
+    W[26+(NY) * 26] = 0.000000001;
     W[27+(NY) * 27] = 0.01;
     W[28+(NY) * 28] = 0.01;
     W[29+(NY) * 29] = 0.01;
-    W[30+(NY) * 30] = 0.5;
-    W[31+(NY) * 31] = 0.5;
-    W[32+(NY) * 32] = 0.5;
-    W[33+(NY) * 33] = 0.5;
-    W[34+(NY) * 34] = 0.0005;
-    W[35+(NY) * 35] = 0.00005;
+    W[30+(NY) * 30] = 0.01;
+    W[31+(NY) * 31] = 0.2;
+    W[32+(NY) * 32] = 0.2;
+    W[33+(NY) * 33] = 0.2;
+    W[34+(NY) * 34] = 0.2;
+    W[35+(NY) * 35] = 0.0005;
     W[36+(NY) * 36] = 0.00005;
-    W[37+(NY) * 37] = 0.01;
+    W[37+(NY) * 37] = 0.00005;
+    W[38+(NY) * 38] = 0.01;
+    W[39+(NY) * 39] = 0.5;
 
     for (int i = 1; i < N; i++)
     {
@@ -603,10 +604,10 @@ void lipm_opti_pessi_acados_setup_nlp_in(lipm_opti_pessi_solver_capsule* capsule
     // change only the non-zero elements:
     yref_e[0] = 2;
     yref_e[1] = 2;
-    yref_e[2] = 0.7853981633974483;
+    yref_e[2] = -0.4363323129985824;
     yref_e[7] = 2;
     yref_e[8] = 2;
-    yref_e[9] = 0.7853981633974483;
+    yref_e[9] = -0.4363323129985824;
     ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, N, "yref", yref_e);
     free(yref_e);
 
@@ -1267,7 +1268,7 @@ static void lipm_opti_pessi_acados_create_set_opts(lipm_opti_pessi_solver_capsul
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "levenberg_marquardt", &levenberg_marquardt);
 
     /* options QP solver */
-    int qp_solver_cond_N;const int qp_solver_cond_N_ori = 7;
+    int qp_solver_cond_N;const int qp_solver_cond_N_ori = 8;
     qp_solver_cond_N = N < qp_solver_cond_N_ori ? N : qp_solver_cond_N_ori; // use the minimum value here
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_cond_N", &qp_solver_cond_N);
 
@@ -1276,6 +1277,14 @@ static void lipm_opti_pessi_acados_create_set_opts(lipm_opti_pessi_solver_capsul
 
     bool store_iterates = false;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "store_iterates", &store_iterates);
+    int log_primal_step_norm = false;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "log_primal_step_norm", &log_primal_step_norm);
+
+    int log_dual_step_norm = false;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "log_dual_step_norm", &log_dual_step_norm);
+
+    double nlp_solver_tol_min_step_norm = 0;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_min_step_norm", &nlp_solver_tol_min_step_norm);
     // set HPIPM mode: should be done before setting other QP solver options
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qp_hpipm_mode", "BALANCE");
 
@@ -1287,17 +1296,75 @@ static void lipm_opti_pessi_acados_create_set_opts(lipm_opti_pessi_solver_capsul
 
 
 
-    int as_rti_iter = 1;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "as_rti_iter", &as_rti_iter);
+    // set SQP specific options
+    double nlp_solver_tol_stat = 0.000001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_stat", &nlp_solver_tol_stat);
 
-    int as_rti_level = 4;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "as_rti_level", &as_rti_level);
+    double nlp_solver_tol_eq = 0.000001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_eq", &nlp_solver_tol_eq);
 
-    int rti_log_residuals = 0;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "rti_log_residuals", &rti_log_residuals);
+    double nlp_solver_tol_ineq = 0.000001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_ineq", &nlp_solver_tol_ineq);
 
-    int rti_log_only_available_residuals = 0;
-    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "rti_log_only_available_residuals", &rti_log_only_available_residuals);
+    double nlp_solver_tol_comp = 0.000001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_comp", &nlp_solver_tol_comp);
+
+    int nlp_solver_max_iter = 5;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "max_iter", &nlp_solver_max_iter);
+
+    // set options for adaptive Levenberg-Marquardt Update
+    bool with_adaptive_levenberg_marquardt = false;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "with_adaptive_levenberg_marquardt", &with_adaptive_levenberg_marquardt);
+
+    double adaptive_levenberg_marquardt_lam = 5;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "adaptive_levenberg_marquardt_lam", &adaptive_levenberg_marquardt_lam);
+
+    double adaptive_levenberg_marquardt_mu_min = 0.0000000000000001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "adaptive_levenberg_marquardt_mu_min", &adaptive_levenberg_marquardt_mu_min);
+
+    double adaptive_levenberg_marquardt_mu0 = 0.001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "adaptive_levenberg_marquardt_mu0", &adaptive_levenberg_marquardt_mu0);
+
+    double adaptive_levenberg_marquardt_obj_scalar = 2;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "adaptive_levenberg_marquardt_obj_scalar", &adaptive_levenberg_marquardt_obj_scalar);
+
+    bool eval_residual_at_max_iter = false;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "eval_residual_at_max_iter", &eval_residual_at_max_iter);
+
+    // QP scaling
+    double qpscaling_ub_max_abs_eig = 100000;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qpscaling_ub_max_abs_eig", &qpscaling_ub_max_abs_eig);
+
+    double qpscaling_lb_norm_inf_grad_obj = 0.0001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qpscaling_lb_norm_inf_grad_obj", &qpscaling_lb_norm_inf_grad_obj);
+
+    qpscaling_scale_objective_type qpscaling_scale_objective = NO_OBJECTIVE_SCALING;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qpscaling_scale_objective", &qpscaling_scale_objective);
+
+    ocp_nlp_qpscaling_constraint_type qpscaling_scale_constraints = NO_CONSTRAINT_SCALING;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "qpscaling_scale_constraints", &qpscaling_scale_constraints);
+
+    // NLP QP tol strategy
+    ocp_nlp_qp_tol_strategy_t nlp_qp_tol_strategy = FIXED_QP_TOL;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "nlp_qp_tol_strategy", &nlp_qp_tol_strategy);
+
+    double nlp_qp_tol_reduction_factor = 0.1;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "nlp_qp_tol_reduction_factor", &nlp_qp_tol_reduction_factor);
+
+    double nlp_qp_tol_safety_factor = 0.1;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "nlp_qp_tol_safety_factor", &nlp_qp_tol_safety_factor);
+
+    double nlp_qp_tol_min_stat = 0.000000001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "nlp_qp_tol_min_stat", &nlp_qp_tol_min_stat);
+
+    double nlp_qp_tol_min_eq = 0.0000000001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "nlp_qp_tol_min_eq", &nlp_qp_tol_min_eq);
+
+    double nlp_qp_tol_min_ineq = 0.0000000001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "nlp_qp_tol_min_ineq", &nlp_qp_tol_min_ineq);
+
+    double nlp_qp_tol_min_comp = 0.00000000001;
+    ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "nlp_qp_tol_min_comp", &nlp_qp_tol_min_comp);
 
     bool with_anderson_acceleration = false;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "with_anderson_acceleration", &with_anderson_acceleration);
@@ -1624,19 +1691,29 @@ void lipm_opti_pessi_acados_print_stats(lipm_opti_pessi_solver_capsule* capsule)
         printf("stat_n_max = %d is too small, increase it in the template!\n", stat_n_max);
         exit(1);
     }
-    double stat[1616];
+    double stat[96];
     ocp_nlp_get(capsule->nlp_solver, "statistics", stat);
 
     int nrow = nlp_iter+1 < stat_m ? nlp_iter+1 : stat_m;
 
 
-    printf("iter\tqp_stat\tqp_iter\n");
+    printf("iter\tres_stat\tres_eq\t\tres_ineq\tres_comp\tqp_stat\tqp_iter\talpha");
+    if (stat_n > 8)
+        printf("\t\tqp_res_stat\tqp_res_eq\tqp_res_ineq\tqp_res_comp");
+    printf("\n");
     for (int i = 0; i < nrow; i++)
     {
         for (int j = 0; j < stat_n + 1; j++)
         {
-            tmp_int = (int) stat[i + j * nrow];
-            printf("%d\t", tmp_int);
+            if (j == 0 || j == 5 || j == 6)
+            {
+                tmp_int = (int) stat[i + j * nrow];
+                printf("%d\t", tmp_int);
+            }
+            else
+            {
+                printf("%e\t", stat[i + j * nrow]);
+            }
         }
         printf("\n");
     }
