@@ -158,18 +158,12 @@ def create_lipm_ocp(
     hip0_expr_next_op = c_next_op + R_theta_op @ hip_offset0
     hip1_expr_next_op = c_next_op + R_theta_op @ hip_offset1
 
-    # --- Dynamic weights and alignment with velocity vector ---
-    k_dist = 1.0
-    dist_sq_op = (c_op[0] - c_target[0])**2 + (c_op[1] - c_target[1])**2
-    # epsilon will be 1 on the target and 0 when far from it
-    epsilon_op = 1.0 / (1.0 + k_dist * dist_sq_op)
-
-    # Use the weighted error instead of theta_err
-    theta_err_weighted_op = epsilon_op * (theta_op - theta_target)
-
-    # Weight the velocity (1-alpha)
-    v_loc_y_op = -c_dot_op[0] * cs.sin(theta_op) + c_dot_op[1] * cs.cos(theta_op)
-    v_loc_weighted_op = (1.0 - epsilon_op) * v_loc_y_op
+    # --- Vel heading ---
+    # ((vx^2+vy^2)cos(theta)^2-vx^2)^2 + ((vx^2+vy^2)sin(theta)^2-vy^2)^2
+    vx_op, vy_op = c_dot_op[0], c_dot_op[1]
+    v_sq_op = vx_op**2 + vy_op**2
+    vel_err_op = (v_sq_op*(cs.cos(theta_op))**2-vx_op**2)+(v_sq_op*(cs.sin(theta_op))**2-vy_op**2)
+    # vel_err_op = -vx_op * cs.sin(theta_op) + vy_op * cs.cos(theta_op)
 
 
     # COSTS
@@ -179,11 +173,11 @@ def create_lipm_ocp(
     hip_err_1_op = p1_next_op - hip1_expr_next_op
 
     cost_y_expr_op = cs.vertcat(
-        c_op, theta_err_weighted_op, c_dot_op, theta_dot_op, x_op[10],
+        c_op, vel_err_op, c_dot_op, theta_dot_op, x_op[10],
         delta_p0_move_op, delta_p1_move_op, 
         hip_err_0_op, hip_err_1_op, 
         u_op[4] - 0.5, u_op[5:7], u_op[7] - dt_nominal,
-        v_loc_weighted_op
+        0.0
     )
     cost_y_expr_e_op = cs.vertcat(c_op, theta_op, c_dot_op, theta_dot_op, x_op[10])
 
@@ -200,11 +194,10 @@ def create_lipm_ocp(
     hip0_expr_next_pe = c_next_pe + R_theta_pe @ hip_offset0
     hip1_expr_next_pe = c_next_pe + R_theta_pe @ hip_offset1
 
-    dist_sq_pe = (c_pe[0] - c_target[0])**2 + (c_pe[1] - c_target[1])**2
-    epsilon_pe = 1.0 / (1.0 + k_dist * dist_sq_pe)
-    theta_err_weighted_pe = epsilon_pe * (theta_pe - theta_target)
-    v_loc_y_pe = -c_dot_pe[0] * cs.sin(theta_pe) + c_dot_pe[1] * cs.cos(theta_pe)
-    v_loc_weighted_pe = (1.0 - epsilon_pe) * v_loc_y_pe
+    vx_pe, vy_pe = c_dot_pe[0], c_dot_pe[1]
+    v_sq_pe = vx_pe**2 + vy_pe**2
+    vel_err_pe = (v_sq_pe*(cs.cos(theta_pe))**2-vx_pe**2)+(v_sq_pe*(cs.sin(theta_pe))**2-vy_pe**2)
+    # vel_err_pe = -vx_pe * cs.sin(theta_pe) + vy_pe * cs.cos(theta_pe)
 
     delta_p0_move_pe = p0_next_pe - p0_pe  
     delta_p1_move_pe = p1_next_pe - p1_pe
@@ -212,11 +205,11 @@ def create_lipm_ocp(
     hip_err_1_pe = p1_next_pe - hip1_expr_next_pe
 
     cost_y_expr_pe = cs.vertcat(
-        c_pe, theta_err_weighted_pe, c_dot_pe, theta_dot_pe, x_pe[10],
+        c_pe, vel_err_pe, c_dot_pe, theta_dot_pe, x_pe[10],
         delta_p0_move_pe, delta_p1_move_pe, 
         hip_err_0_pe, hip_err_1_pe, 
         u_pe[4] - 0.5, u_pe[5:7], u_pe[7] - dt_nominal,
-        v_loc_weighted_pe
+        0.0
     )
     cost_y_expr_e_pe = cs.vertcat(c_pe, theta_pe, c_dot_pe, theta_dot_pe, x_pe[10])
 
