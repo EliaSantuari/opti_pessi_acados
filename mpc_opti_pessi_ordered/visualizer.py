@@ -219,6 +219,47 @@ def plot_simulation_results(history_X, history_U, history_obs, foot_positions_wo
     ax_clean.axis('equal')
 
 
+# --- 1. Trajectory & Robot Shape (Tutti i piedi campionati collegati) ---
+    fig1, ax1 = plt.subplots(figsize=(10, 8))
+    
+    # 1. Traiettoria del CoM
+    ax1.plot(traj[:, 0], traj[:, 1], color='#40c4c4', linewidth=2.5, label='Opti-Pessi MPC', zorder=2)
+    ax1.plot(traj[:, 0], traj[:, 1], 'o', color='#40c4c4', markersize=4, zorder=2)
+
+    # 2. Start e Goal
+    ax1.plot(traj[0, 0], traj[0, 1], 'bs', markersize=7, label='Start', zorder=3)
+    ax1.plot(c_target[0], c_target[1], 'v', color='blue', markersize=7, label='Goal', zorder=3)
+
+    # 3. Ostacolo
+    ax1.plot(obs_pos[0], obs_pos[1], 'rs', markersize=7, label='Obstacle', zorder=3)
+
+    # 4. Piedi p0 e p1
+    p0_traj = traj[:, 6:8]
+    p1_traj = traj[:, 8:10]
+    
+    ax1.scatter(p0_traj[::draw_interval, 0], p0_traj[::draw_interval, 1], c='green', marker='^', s=40, label='p0', alpha=0.9, zorder=3)
+    ax1.scatter(p1_traj[::draw_interval, 0], p1_traj[::draw_interval, 1], c='purple', marker='v', s=40, label='p1', alpha=0.9, zorder=3)
+
+    # 5. Collegamento CoM -> p0 e CoM -> p1 SIMULTANEO per ogni punto campionato
+    for i in range(0, len(traj), draw_interval):
+        c_x, c_y = traj[i, 0], traj[i, 1]
+        
+        p0_x, p0_y = p0_traj[i, 0], p0_traj[i, 1]
+        p1_x, p1_y = p1_traj[i, 0], p1_traj[i, 1]
+        
+        # Disegna la linea per p0
+        ax1.plot([c_x, p0_x], [c_y, p0_y], color='gray', linestyle='-', linewidth=0.5, alpha=0.6)
+        # Disegna la linea per p1
+        ax1.plot([c_x, p1_x], [c_y, p1_y], color='gray', linestyle='-', linewidth=0.5, alpha=0.6)
+
+    sim_T = len(traj) * 0.05
+    ax1.set_title(f'Opti-Pessi MPC, N = {sim_cfg.N_horizon}, sim_T = {sim_T:.2f} s', fontsize=14)
+    
+    ax1.set_xlabel('X [m]', fontsize=12)
+    ax1.set_ylabel('Y [m]', fontsize=12)
+    ax1.legend(loc='upper left', fontsize=11)
+    ax1.grid(True, linestyle='-', alpha=0.6)
+    ax1.axis('equal')
 
     plt.tight_layout()
     plt.show()

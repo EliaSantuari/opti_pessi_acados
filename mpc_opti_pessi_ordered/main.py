@@ -27,6 +27,8 @@ def main():
 
     # ---- Initialization of the state ----
     X_sim = np.zeros(11)
+    X_sim[0:2] = robot_cfg.x_init
+    X_sim[2] = robot_cfg.theta_init
     # Initialization of the gait
     init_gait = gait_planner.get_gait_horizon(0, sim_cfg.N_horizon)[0]
     initial_hips = gait_planner.compute_hip_positions(X_sim[0:3], init_gait)
@@ -155,25 +157,26 @@ def main():
             solver.set(k, 'p', p_val)
             solver.set(k, 'yref', yref) # Update the intermediate target
 
-            # Initialization of the line (WARM START) (line pointing towards the obstacle)
-            dir_to_obs = obs_pos - X_sim[0:2]
-            dist_to_obs = np.linalg.norm(dir_to_obs) + 1e-5
-            
-            # Normal points towards the obstacle
-            a_guess = dir_to_obs / dist_to_obs
-            # b_guess place a line exactly in between the robot and the obstacle
-            b_guess = -np.dot(a_guess, (X_sim[0:2] + obs_pos) / 2.0)
-            
-            # u_guess uses the ACTUAL position of the feet (X[6:10]) as guess fot eh future
-            u_guess_11 = np.array([
-                X_sim[6], X_sim[7], X_sim[8], X_sim[9],  # p0_next, p1_next 
-                0.5,                     # alpha
-                0.0, 0.0,                # f_diff
-                0.0625,                  # dt_var
-                a_guess[0], a_guess[1],  # ax, ay
-                b_guess                  # b 
-            ])
-            solver.set(k, 'u', np.concatenate([u_guess_11, u_guess_11]))
+            if step == 0:
+                # Initialization of the line (WARM START) (line pointing towards the obstacle)
+                dir_to_obs = obs_pos - X_sim[0:2]
+                dist_to_obs = np.linalg.norm(dir_to_obs) + 1e-5
+                
+                # Normal points towards the obstacle
+                a_guess = dir_to_obs / dist_to_obs
+                # b_guess place a line exactly in between the robot and the obstacle
+                b_guess = -np.dot(a_guess, (X_sim[0:2] + obs_pos) / 2.0)
+                
+                # u_guess uses the ACTUAL position of the feet (X[6:10]) as guess fot eh future
+                u_guess_11 = np.array([
+                    X_sim[6], X_sim[7], X_sim[8], X_sim[9],  # p0_next, p1_next 
+                    0.5,                     # alpha
+                    0.0, 0.0,                # f_diff
+                    0.0625,                  # dt_var
+                    a_guess[0], a_guess[1],  # ax, ay
+                    b_guess                  # b 
+                ])
+                solver.set(k, 'u', np.concatenate([u_guess_11, u_guess_11]))
 
         # Set the parameter of the final step because is missing
         solver.set(sim_cfg.N_horizon, 'p', p_val)

@@ -47,7 +47,7 @@ def create_lipm_ocp(
     # (h_dist0_curr, h_dist1_curr, h_dist0_next, h_dist1_next, fric0, fric1) 
     lh_robot = [0.0, 0.0, 0.0, 0.0, -1e6, -1e6]
     # (eq_norm_a, eq_s[0], eq_s[1], eq_s[2], eq_s[3], eq_p[0], eq_p[1], eq_obs) 
-    lh_obs = [0.0, -1e6, -1e6, -1e6, -1e6, -1e6, -1e6, 0.0] 
+    lh_obs = [0.5, -1e6, -1e6, -1e6, -1e6, -1e6, -1e6, 0.0] 
     # (v_loc_x, v_loc_y)
     lh_vel = [-limits.v_max_x, -limits.v_max_y] 
 
