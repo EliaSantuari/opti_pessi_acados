@@ -1,0 +1,65 @@
+from dataclasses import dataclass
+import numpy as np
+
+
+@dataclass
+class RobotConfig:
+    # Geometrical dimensions
+    h_com: float = 0.38
+    g: float = 9.81
+    m: float = 24.24 # 12.0
+    Iz: float = 1.048 # 0.15
+    off_x: float = 0.2407 # 0.2
+    off_y: float = 0.134
+    mu: float = 0.6 # 0.8
+    max_ext_sq: float = 0.05 # Leg extension limit squared
+
+
+@dataclass
+class Limits:
+    dt_min: float = 0.1     # / steps_per_phase 
+    dt_max: float = 0.25    # / steps_per_phase 
+    theta_dot: float = 0.6 # 0.8  
+    v_max_x: float = 1.5 # 0.6
+    v_max_y: float = 0.3 # 0.3
+    alpha_min: float = 0.1
+    alpha_max: float = 0.9
+    f_diff_max:float = 100
+
+
+@dataclass
+class MPCWeights:
+    # Weights for the optimistic branch (W_diag_op)
+    tracking_xy: float = 20.0       # 0-1: Tracking x, y
+    theta_dyn: float = 10.0         # 2: theta dynamic
+    vel_xy: float = 5.0             # 3-4: velocity x, y
+    yaw_rate: float = 0.5           # 5: Yaw rate
+    time_weight: float = 1e-6       # 6: Time
+    anti_skating: float = 10.0      # 7-10: Anti-Skating
+    posture: float = 300.0          # 11-14: Posture
+    alpha_weight: float = 1       # 15: Alpha
+    f_diff_weight: float = 10     # 16-17: f_diff
+    dt_weight: float = 10           # 18: dt
+    vel_alignment: float = 500.0    # 19: Velocity alignment
+    
+    # Pessimistic scale to avoid null-space explosion
+    pessimistic_scale: float = 1e-3
+
+
+@dataclass
+class SimulationConfig:
+    N_horizon: int = 8
+    sim_steps: int = 400
+    steps_per_phase: int = 4
+    c_target: np.ndarray = np.array([10.0, 5.0])
+    theta_target: float = np.deg2rad(-180)
+
+
+@dataclass
+class ObstacleConfig:
+    pos_init: np.ndarray = np.array([6.0, 0.65])
+    r_obs: float = 0.3
+    speed: float = 2
+    y_dot_max: float = 0.3
+    r_circle: float = 1
+    obs_type: str = "circular" # "static", "dynamic", "adversarial", "circular"
