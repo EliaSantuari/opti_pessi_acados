@@ -499,10 +499,10 @@ void lipm_opti_pessi_acados_setup_nlp_in(lipm_opti_pessi_solver_capsule* capsule
     // change only the non-zero elements:
     W_0[0+(NY0) * 0] = 5;
     W_0[1+(NY0) * 1] = 5;
-    W_0[2+(NY0) * 2] = 40;
+    W_0[2+(NY0) * 2] = 60;
     W_0[3+(NY0) * 3] = 5;
     W_0[4+(NY0) * 4] = 5;
-    W_0[5+(NY0) * 5] = 30;
+    W_0[5+(NY0) * 5] = 5;
     W_0[6+(NY0) * 6] = 0.000001;
     W_0[7+(NY0) * 7] = 10;
     W_0[8+(NY0) * 8] = 10;
@@ -516,10 +516,10 @@ void lipm_opti_pessi_acados_setup_nlp_in(lipm_opti_pessi_solver_capsule* capsule
     W_0[16+(NY0) * 16] = 10;
     W_0[17+(NY0) * 17] = 0.005;
     W_0[18+(NY0) * 18] = 0.005;
-    W_0[19+(NY0) * 19] = 0.04;
+    W_0[19+(NY0) * 19] = 0.06;
     W_0[20+(NY0) * 20] = 0.005;
     W_0[21+(NY0) * 21] = 0.005;
-    W_0[22+(NY0) * 22] = 0.03;
+    W_0[22+(NY0) * 22] = 0.005;
     W_0[23+(NY0) * 23] = 0.000000001;
     W_0[24+(NY0) * 24] = 0.01;
     W_0[25+(NY0) * 25] = 0.01;
@@ -549,10 +549,10 @@ void lipm_opti_pessi_acados_setup_nlp_in(lipm_opti_pessi_solver_capsule* capsule
     // change only the non-zero elements:
     W[0+(NY) * 0] = 5;
     W[1+(NY) * 1] = 5;
-    W[2+(NY) * 2] = 40;
+    W[2+(NY) * 2] = 60;
     W[3+(NY) * 3] = 5;
     W[4+(NY) * 4] = 5;
-    W[5+(NY) * 5] = 30;
+    W[5+(NY) * 5] = 5;
     W[6+(NY) * 6] = 0.000001;
     W[7+(NY) * 7] = 10;
     W[8+(NY) * 8] = 10;
@@ -566,10 +566,10 @@ void lipm_opti_pessi_acados_setup_nlp_in(lipm_opti_pessi_solver_capsule* capsule
     W[16+(NY) * 16] = 10;
     W[17+(NY) * 17] = 0.005;
     W[18+(NY) * 18] = 0.005;
-    W[19+(NY) * 19] = 0.04;
+    W[19+(NY) * 19] = 0.06;
     W[20+(NY) * 20] = 0.005;
     W[21+(NY) * 21] = 0.005;
-    W[22+(NY) * 22] = 0.03;
+    W[22+(NY) * 22] = 0.005;
     W[23+(NY) * 23] = 0.000000001;
     W[24+(NY) * 24] = 0.01;
     W[25+(NY) * 25] = 0.01;
@@ -602,13 +602,13 @@ void lipm_opti_pessi_acados_setup_nlp_in(lipm_opti_pessi_solver_capsule* capsule
     W_e[1+(NYN) * 1] = 5;
     W_e[2+(NYN) * 2] = 5;
     W_e[3+(NYN) * 3] = 5;
-    W_e[4+(NYN) * 4] = 30;
+    W_e[4+(NYN) * 4] = 5;
     W_e[5+(NYN) * 5] = 0.000001;
     W_e[6+(NYN) * 6] = 0.005;
     W_e[7+(NYN) * 7] = 0.005;
     W_e[8+(NYN) * 8] = 0.005;
     W_e[9+(NYN) * 9] = 0.005;
-    W_e[10+(NYN) * 10] = 0.03;
+    W_e[10+(NYN) * 10] = 0.005;
     W_e[11+(NYN) * 11] = 0.000000001;
     ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, N, "W", W_e);
     free(W_e);
@@ -1280,7 +1280,7 @@ static void lipm_opti_pessi_acados_create_set_opts(lipm_opti_pessi_solver_capsul
     double nlp_solver_tol_comp = 0.000001;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "tol_comp", &nlp_solver_tol_comp);
 
-    int nlp_solver_max_iter = 20;
+    int nlp_solver_max_iter = 6;
     ocp_nlp_solver_opts_set(nlp_config, nlp_opts, "max_iter", &nlp_solver_max_iter);
 
     // set options for adaptive Levenberg-Marquardt Update
@@ -1666,7 +1666,7 @@ void lipm_opti_pessi_acados_print_stats(lipm_opti_pessi_solver_capsule* capsule)
         printf("stat_n_max = %d is too small, increase it in the template!\n", stat_n_max);
         exit(1);
     }
-    double stat[336];
+    double stat[112];
     ocp_nlp_get(capsule->nlp_solver, "statistics", stat);
 
     int nrow = nlp_iter+1 < stat_m ? nlp_iter+1 : stat_m;

@@ -34,16 +34,16 @@ class Limits:
 class MPCWeights:
     # Weights for the optimistic branch (W_diag_op)
     tracking_xy: float = 5.0       # 0-1: Tracking x, y
-    theta_dyn: float = 10.0         # 2: theta dynamic
+    theta_dyn: float = 10.0         # 2: theta dynamic NOT USED
     vel_xy: float = 5.0             # 3-4: velocity x, y
-    yaw_rate: float = 30           # 5: Yaw rate
+    yaw_rate: float = 5           # 5: Yaw rate
     time_weight: float = 1e-6       # 6: Time
     anti_skating: float = 10.0      # 7-10: Anti-Skating
     posture: float = 300.0          # 11-14: Posture
     alpha_weight: float = 1       # 15: Alpha
-    f_diff_weight: float = 10     # 16-17: f_diff
+    f_diff_weight: float = 10     # 16-17: f_diff NOT USED
     dt_weight: float = 10           # 18: dt
-    vel_alignment: float = 40.0    # 19: Velocity alignment
+    vel_alignment: float = 60.0    # 19: Velocity alignment
 
 
 @dataclass
