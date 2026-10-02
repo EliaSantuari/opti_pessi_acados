@@ -23,6 +23,199 @@ def draw_robot(ax, c_x, c_y, theta, alpha=0.3):
     ax.plot([c_x, front_mid[0]], [c_y, front_mid[1]], color='red', alpha=alpha, linewidth=2)
 
 
+
+
+from matplotlib.animation import FuncAnimation
+from matplotlib.collections import LineCollection
+from matplotlib.patches import Circle
+
+
+def animate_robot_feet(history_X, history_obs, obs_r,
+                       interval=80, tail_frames=40):
+    """
+    Anima CoM, impronte/traettorie dei piedi e ostacolo.
+
+    history_X: stati con colonne
+        0,1 = posizione CoM
+        6,7 = piede p0
+        8,9 = piede p1
+    history_obs: posizione dell'ostacolo a ogni step, forma (N, 2)
+    obs_r: raggio dell'ostacolo [m]
+    interval: intervallo tra frame [ms]
+    tail_frames: numero di step dopo cui le tracce scompaiono
+    """
+    traj = np.asarray(history_X)
+    obs_traj = np.asarray(history_obs)
+
+    if traj.ndim != 2 or traj.shape[1] < 10:
+        raise ValueError("history_X deve avere almeno 10 colonne.")
+    if obs_traj.ndim != 2 or obs_traj.shape[1] < 2:
+        raise ValueError("history_obs deve avere forma (N, 2).")
+
+    n = min(len(traj), len(obs_traj))
+    if n == 0:
+        raise ValueError("Le storie della simulazione sono vuote.")
+
+    traj = traj[:n]
+    obs_traj = obs_traj[:n]
+
+    com = traj[:, 0:2]
+    p0 = traj[:, 6:8]
+    p1 = traj[:, 8:10]
+
+    fig, ax = plt.subplots(figsize=(9, 7))
+
+    # Limiti del grafico: includono CoM, piedi e ostacolo
+    all_x = np.concatenate((com[:, 0], p0[:, 0], p1[:, 0], obs_traj[:, 0]))
+    all_y = np.concatenate((com[:, 1], p0[:, 1], p1[:, 1], obs_traj[:, 1]))
+    margin = obs_r + 0.3
+    ax.set_xlim(all_x.min() - margin, all_x.max() + margin)
+    ax.set_ylim(all_y.min() - margin, all_y.max() + margin)
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_xlabel("X [m]")
+    ax.set_ylabel("Y [m]")
+    ax.set_title("Animazione CoM, impronte dei piedi e ostacolo")
+    ax.grid(True, alpha=0.4)
+
+    # Traiettorie recenti
+    com_line, = ax.plot([], [], color="black", linewidth=1.8,
+                        alpha=0.65, label="Traiettoria CoM")
+    obs_line, = ax.plot([], [], color="red", linestyle="--",
+                        linewidth=1.5, alpha=0.6, label="Traiettoria ostacolo")
+
+    # Linee delle gambe: CoM -> piedi attuali
+    leg0_line, = ax.plot([], [], color="forestgreen", linewidth=1.8,
+                         label="CoM–p0")
+    leg1_line, = ax.plot([], [], color="purple", linewidth=1.8,
+                         label="CoM–p1")
+
+    # Tracce dei piedi, con segmenti che sfumano nel tempo
+    p0_trail = LineCollection([], linewidths=2.0, zorder=2)
+    p1_trail = LineCollection([], linewidths=2.0, zorder=2)
+    ax.add_collection(p0_trail)
+    ax.add_collection(p1_trail)
+
+    # Impronte recenti
+    p0_marks = ax.scatter([], [], marker="^", s=75, c="green",
+                          edgecolors="black", zorder=4, label="Impronte p0")
+    p1_marks = ax.scatter([], [], marker="v", s=75, c="purple",
+                          edgecolors="black", zorder=4, label="Impronte p1")
+
+    # CoM corrente
+    com_dot, = ax.plot([], [], "ko", markersize=8, zorder=6, label="CoM")
+
+    # Ostacolo corrente
+    obstacle_now = Circle((0, 0), obs_r, color="red", alpha=0.25,
+                          zorder=1, label="Ostacolo")
+    ax.add_patch(obstacle_now)
+    obstacle_center, = ax.plot([], [], "ro", markersize=5, zorder=5)
+
+    # Cerchi delle posizioni passate dell'ostacolo
+    ghost_circles = []
+
+    def fading_segments(points, start, end, color):
+        """Crea segmenti colorati con trasparenza decrescente nel passato."""
+        if end - start < 2:
+            return [], []
+
+        segments, colors = [], []
+        for j in range(start, end - 1):
+            segments.append([points[j], points[j + 1]])
+            age = (end - 1) - j
+            alpha = max(0.05, 0.8 * (1 - age / max(1, tail_frames)))
+            colors.append((*plt.matplotlib.colors.to_rgb(color), alpha))
+        return segments, colors
+
+    def update(frame):
+        nonlocal ghost_circles
+
+        start = max(0, frame - tail_frames + 1)
+
+        # CoM e sua scia
+        com_line.set_data(com[start:frame + 1, 0], com[start:frame + 1, 1])
+        com_dot.set_data([com[frame, 0]], [com[frame, 1]])
+
+        # Piedi correnti e collegamenti al CoM
+        leg0_line.set_data([com[frame, 0], p0[frame, 0]],
+                           [com[frame, 1], p0[frame, 1]])
+        leg1_line.set_data([com[frame, 0], p1[frame, 0]],
+                           [com[frame, 1], p1[frame, 1]])
+
+        # Tracce dei piedi
+        seg0, col0 = fading_segments(p0, start, frame + 1, "green")
+        seg1, col1 = fading_segments(p1, start, frame + 1, "purple")
+        p0_trail.set_segments(seg0)
+        p0_trail.set_colors(col0)
+        p1_trail.set_segments(seg1)
+        p1_trail.set_colors(col1)
+
+        # Impronte: le più vecchie diventano trasparenti
+        # idx = np.arange(start, frame + 1)
+        idx = np.arange(0, frame + 1, sim_cfg.steps_per_phase)  # step 0, 4, 8, 12, ...
+        idx = idx[idx >= start]
+        ages = frame - idx
+        alphas = np.maximum(0.05, 0.85 * (1 - ages / max(1, tail_frames)))
+
+        p0_marks.set_offsets(p0[idx])
+        p1_marks.set_offsets(p1[idx])
+        p0_marks.set_facecolors([
+            (0.0, 0.5, 0.0, a) for a in alphas
+        ])
+        p1_marks.set_facecolors([
+            (0.5, 0.0, 0.5, a) for a in alphas
+        ])
+
+        # Traiettoria dell'ostacolo
+        obs_line.set_data(obs_traj[start:frame + 1, 0],
+                          obs_traj[start:frame + 1, 1])
+
+        # Aggiorna cerchi fantasma dell'ostacolo
+        for circle in ghost_circles:
+            circle.remove()
+        ghost_circles = []
+
+        # Mostra al massimo circa 12 posizioni passate, più quella corrente
+        stride = max(1, tail_frames // 12)
+        past_indices = list(range(start, frame, stride))
+
+        for j in past_indices:
+            age = frame - j
+            alpha = max(0.04, 0.45 * (1 - age / max(1, tail_frames)))
+            ghost = Circle(
+                obs_traj[j, :2], obs_r,
+                fill=False, edgecolor="red", linewidth=1.4, alpha=alpha,
+                zorder=1
+            )
+            ax.add_patch(ghost)
+            ghost_circles.append(ghost)
+
+        # Ostacolo corrente: centro e raggio
+        obstacle_now.center = obs_traj[frame, :2]
+        obstacle_center.set_data(
+            [obs_traj[frame, 0]], [obs_traj[frame, 1]]
+        )
+
+        ax.set_title(
+            f"Step {frame + 1}/{n} — raggio ostacolo: {obs_r:.2f} m"
+        )
+
+        return (
+            com_line, com_dot, leg0_line, leg1_line,
+            p0_trail, p1_trail, p0_marks, p1_marks,
+            obs_line, obstacle_now, obstacle_center
+        )
+
+    ax.legend(loc="best")
+    animation = FuncAnimation(
+        fig, update, frames=n, interval=interval,
+        blit=False, repeat=False
+    )
+
+    return animation
+
+
+
+
 def plot_simulation_results(history_X, history_U, history_obs, foot_positions_world, distances, target, obs_params):
     """Raccoglie e genera tutti i grafici della simulazione con i relativi limiti."""
     traj = np.array(history_X)
@@ -56,7 +249,7 @@ def plot_simulation_results(history_X, history_U, history_obs, foot_positions_wo
     # Disegna la sagoma del robot e le GAMBE
     # Aumentiamo l'intervallo per non creare un "verme" nero incomprensibile
     # draw_interval = max(1, len(traj) // 10) # Disegna circa 10-15 sagome in tutto
-    draw_interval = 4
+    draw_interval = sim_cfg.steps_per_phase
     
     for i in range(0, len(traj), draw_interval):
         alpha_val = 0.8 if (i == 0 or i >= len(traj) - draw_interval) else 0.3
@@ -293,8 +486,15 @@ def plot_simulation_results(history_X, history_U, history_obs, foot_positions_wo
     ax_dist.grid(True)
     ax_dist.legend()
     
-
+    ani = animate_robot_feet(
+    history_X=history_X,
+    history_obs=history_obs,
+    obs_r=obs_r,
+    interval=80,
+    tail_frames=40
+)
 
 
     plt.tight_layout()
     plt.show()
+

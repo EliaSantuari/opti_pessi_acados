@@ -21,7 +21,7 @@ class RobotConfig:
 @dataclass
 class Limits:
     dt_min: float = 0.05     # / steps_per_phase 
-    dt_max: float = 0.1    # / steps_per_phase 
+    dt_max: float = 0.1   # / steps_per_phase 
     theta_dot: float = 0.6 # 0.8  
     v_max_x: float = 0.6 # 0.6
     v_max_y: float = 0.3 # 0.3
@@ -36,34 +36,36 @@ class MPCWeights:
     tracking_xy: float = 5.0       # 0-1: Tracking x, y
     theta_dyn: float = 10.0         # 2: theta dynamic
     vel_xy: float = 5.0             # 3-4: velocity x, y
-    yaw_rate: float = 3           # 5: Yaw rate
+    yaw_rate: float = 30           # 5: Yaw rate
     time_weight: float = 1e-6       # 6: Time
     anti_skating: float = 10.0      # 7-10: Anti-Skating
     posture: float = 300.0          # 11-14: Posture
     alpha_weight: float = 1       # 15: Alpha
     f_diff_weight: float = 10     # 16-17: f_diff
     dt_weight: float = 10           # 18: dt
-    vel_alignment: float = 10.0    # 19: Velocity alignment
+    vel_alignment: float = 40.0    # 19: Velocity alignment
 
 
 @dataclass
 class SimulationConfig:
-    N_horizon: int = 8
+    N_horizon: int = 7
     sim_steps: int = 400
-    steps_per_phase: int = 4
+    steps_per_phase: int = 1
     c_target: np.ndarray = np.array([1.0, 0.2])
     theta_target: float = np.deg2rad(0)
+    solver_type: str = 'SQP' # SQP, SQP_RTI
+    max_iter: int = 6#None
 
 
 
 @dataclass
 class ObstacleConfig:
     pos_init: np.ndarray = np.array([0.1, 1.0])
-    r_obs: float = 0.1
-    speed: float = 0.5
-    y_dot_max: float = 0.5
+    r_obs: float = 0.2
+    speed: float = 0.4
+    y_dot_max: float = 0.4
     r_circle: float = 1
-    obs_type: str = "static" # "static", "dynamic", "adversarial", "circular"
+    obs_type: str = "dynamic" # "static", "dynamic", "adversarial", "circular"
     # Dynamic
-    top_pos_dyn: np.ndarray = np.array([0.1, 1])
+    top_pos_dyn: np.ndarray = np.array([0.1, 0.7])
     bot_pos_dyn: np.ndarray = np.array([0.1, -1])

@@ -260,8 +260,7 @@ def main():
 
         # Control if the robot reached the target, if so stop the simulation
         dist_to_target = np.linalg.norm(X_next_sim[0:2] - sim_cfg.c_target)
-        angle_to_target = X_next_sim[2] - sim_cfg.theta_target
-        if dist_to_target < 0.05 and angle_to_target < 0.05: # 5 cm and 0.05 rad threshold
+        if dist_to_target < 0.1: # 5 cm threshold
             reached_target_flag += 1
             if reached_target_flag == 5:
                 print(f"\n[INFO] Target {sim_cfg.c_target} reached successfully at step {step}!")

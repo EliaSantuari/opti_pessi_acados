@@ -337,17 +337,17 @@ def create_lipm_ocp(
     # [11,12]: Feet collision
     # [13]: Obstacle collision
     # [14,15]: Local velocity limits
-    idxsh_branch = [0, 1, 2, 3, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    idxsh_branch = [0, 1, 2, 3, 7, 8, 9, 10, 11, 12, 14, 15]
     idxsh_total = idxsh_branch + [i + 16 for i in idxsh_branch]
     ocp.constraints.idxsh = np.array(idxsh_total)
 
     # Soft constraints on non linear constraints
     # Z: quadratic penalty - z: linear penalty
     # [4x Kinematic] + [7x Collision] + [2x velocities]
-    Zu_sh_branch = [1e4]*4 + [1e6]*7 + [1e3]*2
-    zu_sh_branch = [1e3]*4 + [1e5]*7 + [1e2]*2
-    Zl_sh_branch = [0.0]*4 + [0.0]*6 + [1e6] + [1e3]*2
-    zl_sh_branch = [0.0]*4 + [0.0]*6 + [1e5] + [1e2]*2
+    Zu_sh_branch = [1e4]*4 + [1e6]*6 + [1e3]*2
+    zu_sh_branch = [1e3]*4 + [1e5]*6 + [1e2]*2
+    Zl_sh_branch = [0.0]*4 + [0.0]*6 + [1e3]*2
+    zl_sh_branch = [0.0]*4 + [0.0]*6 + [1e2]*2
 
 
     # Soft constraints on state limits
@@ -385,7 +385,8 @@ def create_lipm_ocp(
     ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM'
     ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
     ocp.solver_options.integrator_type = 'DISCRETE'
-    ocp.solver_options.nlp_solver_type = 'SQP' 
-    ocp.solver_options.nlp_solver_max_iter = 5
+    ocp.solver_options.nlp_solver_type = sim_conf.solver_type 
+    if sim_conf.max_iter != None:
+        ocp.solver_options.nlp_solver_max_iter = sim_conf.max_iter
 
     return AcadosOcpSolver(ocp)
