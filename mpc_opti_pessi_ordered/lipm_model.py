@@ -22,22 +22,27 @@ def create_lipm_ocp(
     # ---- Weights ----
     W_diag_op = [
         weights.tracking_xy, weights.tracking_xy,       # 0,1: Tracking x, y
-        weights.theta_dyn,                              # 2: theta dynamic
+        weights.vel_alignment,                          # 2: Velocity alignment - penalize lateral walk
         weights.vel_xy, weights.vel_xy,                 # 3,4: velocity x, y
-        weights.yaw_rate,                               # 5: Yaw rate
+        weights.yaw_rate,                               # 5: Yaw rate (penalization on fast rotations)
         weights.time_weight,                            # 6: Time
-        weights.anti_skating, weights.anti_skating,     # 7-8: Anti-Skating
-        weights.anti_skating, weights.anti_skating,     # 9-10: Anti-Skating
-        weights.posture, weights.posture,               # 11-12: Posture
-        weights.posture, weights.posture,               # 13-14: Posture
-        weights.alpha_weight, weights.f_diff_weight,    # 15-16: Controls alpha, f_diffx
-        weights.f_diff_weight, weights.dt_weight,       # 17-18: Controls f_diffy, dt
-        weights.vel_alignment                           # 19: Velocity alignment
+        weights.anti_skating, weights.anti_skating,     # 7-8: Anti-Skating foot 0
+        weights.anti_skating, weights.anti_skating,     # 9-10: Anti-Skating foot 1
+        weights.posture, weights.posture,               # 11-12: Posture (keep hip above foot 0)
+        weights.posture, weights.posture,               # 13-14: Posture (keep hip above foot 1)
+        weights.alpha_weight,                           # 15: Alpha
+        weights.dt_weight,                              # 16: dt
     ]
     # Regularization weight for the pessimistic branch to avoid null-space explosion
     W_diag_pe = [w * 1e-3 for w in W_diag_op] 
-    W_end_op = W_diag_op[0:7]
-    W_end_pe = W_diag_pe[0:7]
+    # cost_y_expr_e_op = cs.vertcat(c_op, c_dot_op, theta_dot_op, x_op[10])
+    W_end_op = [
+        weights.tracking_xy, weights.tracking_xy,
+        weights.vel_xy, weights.vel_xy,
+        weights.yaw_rate, 
+        weights.time_weight
+    ]
+    W_end_pe = [w * 1e-3 for w in W_end_op] 
 
     # dt_nominal for the reference
     dt_nominal = (limits.dt_min + limits.dt_max) / (2*sim_conf.steps_per_phase) # We must fix a nominal value, otherwise the solver would sent it to zero to avoid errors
@@ -46,24 +51,30 @@ def create_lipm_ocp(
     max_ext_sq = robot_cfg.max_ext_sq
     # (h_dist0_curr, h_dist1_curr, h_dist0_next, h_dist1_next, fric0, fric1) 
     lh_robot = [0.0, 0.0, 0.0, 0.0, -1e6, -1e6]
-    # (eq_norm_a, eq_s[0], eq_s[1], eq_s[2], eq_s[3], eq_p[0], eq_p[1], eq_obs) 
-    lh_obs = [0.5, -1e6, -1e6, -1e6, -1e6, -1e6, -1e6, 0.0] 
-    # (v_loc_x, v_loc_y)
-    lh_vel = [-limits.v_max_x, -limits.v_max_y] 
-
     uh_robot = [max_ext_sq, max_ext_sq, max_ext_sq, max_ext_sq, 0.0, 0.0]
+
+    # (eq_norm_a, eq_s[0], eq_s[1], eq_s[2], eq_s[3], eq_p[0], eq_p[1], eq_obs) 
+    # eq_s and eq_p ensure hips and feet to be in the negative semiplane (<= 0)
+    lh_obs = [0.5, -1e6, -1e6, -1e6, -1e6, -1e6, -1e6, 0.0] 
     uh_obs  = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1e6]
+
+    # (v_loc_x, v_loc_y) limits local velocities
+    lh_vel = [-limits.v_max_x, -limits.v_max_y] 
     uh_vel = [limits.v_max_x, limits.v_max_y] 
 
-    # ---- Constraints ----
+    # ---- Constraints on state ----
+    # x = [cx, cy, th, cx_dot, cy_dot, th_dot, p0x, p0y, p1x, p1y, time]
+    # we only need to limit theta_dot and total time (indeces [5, 10, 16, 21])
     bnd_x = [-limits.theta_dot, 0.0]
     BND_X = [limits.theta_dot, 100.0]
 
+    # ---- Constraints on controls ----
+    # u_op = [p0_nx, p0_ny, p1_nx, p1_ny, alpha, beta, gamma, dt_var, ax, ay, b]
     dt_min = limits.dt_min / sim_conf.steps_per_phase
     dt_max = limits.dt_max / sim_conf.steps_per_phase
-    # [alpha, f_diffx, f_diffy, dt_var, ax, ay, b]
-    bnd_u_min = [limits.alpha_min, -limits.f_diff_max, -limits.f_diff_max, dt_min, -1.0, -1.0, -10.0]
-    bnd_u_max = [limits.alpha_max, limits.f_diff_max, limits.f_diff_max, dt_max, 1.0, 1.0, 10.0]
+    # [alpha, beta, gamma, dt_var, ax, ay, b]
+    bnd_u_min = [limits.alpha_min, 0.0, 0.0, dt_min, -1.0, -1.0, -100.0]
+    bnd_u_max = [limits.alpha_max, 1.0, 1.0, dt_max, 1.0, 1.0, 100.0]
 
     w = np.sqrt(robot_cfg.g / robot_cfg.h_com) # Frequency constant
 
@@ -94,7 +105,8 @@ def create_lipm_ocp(
 
         p0_next, p1_next = u_curr[0:2], u_curr[2:4]
         alpha = u_curr[4]
-        f_diff = u_curr[5:7]
+        beta = u_curr[5]
+        gamma = u_curr[6]
         dt_var = u_curr[7]
 
         ch, sh = cs.cosh(w * dt_var), cs.sinh(w * dt_var)
@@ -104,8 +116,14 @@ def create_lipm_ocp(
         # Divide the force into tangential (F_tot) and rotationsl (f_diff)
                     # beta and gamma could only make the robot rotate only if it was already going ahead, otherwise it couldn't
         F_tot = robot_cfg.m * c_ddot
-        f0 = F_tot / 2.0 + f_diff
-        f1 = F_tot / 2.0 - f_diff
+        f0_x = beta * F_tot[0]
+        f1_x = (1.0 - beta) * F_tot[0]
+        
+        f0_y = gamma * F_tot[1]
+        f1_y = (1.0 - gamma) * F_tot[1]
+        
+        f0 = cs.vertcat(f0_x, f0_y)
+        f1 = cs.vertcat(f1_x, f1_y)
 
         tau_z0 = (p0[0] - c[0]) * f0[1] - (p0[1] - c[1]) * f0[0]
         tau_z1 = (p1[0] - c[0]) * f1[1] - (p1[1] - c[1]) * f1[0]
@@ -162,7 +180,7 @@ def create_lipm_ocp(
     # ((vx^2+vy^2)cos(theta)^2-vx^2)^2 + ((vx^2+vy^2)sin(theta)^2-vy^2)^2
     vx_op, vy_op = c_dot_op[0], c_dot_op[1]
     v_sq_op = vx_op**2 + vy_op**2
-    vel_err_op = (v_sq_op*(cs.cos(theta_op))**2-vx_op**2)+(v_sq_op*(cs.sin(theta_op))**2-vy_op**2)
+    vel_err_op = (v_sq_op*(cs.cos(theta_op))**2-vx_op**2)**2+(v_sq_op*(cs.sin(theta_op))**2-vy_op**2)**2
     # vel_err_op = -vx_op * cs.sin(theta_op) + vy_op * cs.cos(theta_op)
 
 
@@ -176,10 +194,9 @@ def create_lipm_ocp(
         c_op, vel_err_op, c_dot_op, theta_dot_op, x_op[10],
         delta_p0_move_op, delta_p1_move_op, 
         hip_err_0_op, hip_err_1_op, 
-        u_op[4] - 0.5, u_op[5:7], u_op[7] - dt_nominal,
-        0.0
+        u_op[4] - 0.5, u_op[7] - dt_nominal
     )
-    cost_y_expr_e_op = cs.vertcat(c_op, theta_op, c_dot_op, theta_dot_op, x_op[10])
+    cost_y_expr_e_op = cs.vertcat(c_op, c_dot_op, theta_dot_op, x_op[10])
 
     # --- COST FUNCTION FOR PESSIMISTIC BRANCH (Regularization) ---
     c_pe, theta_pe = x_pe[0:2], x_pe[2]
@@ -196,7 +213,7 @@ def create_lipm_ocp(
 
     vx_pe, vy_pe = c_dot_pe[0], c_dot_pe[1]
     v_sq_pe = vx_pe**2 + vy_pe**2
-    vel_err_pe = (v_sq_pe*(cs.cos(theta_pe))**2-vx_pe**2)+(v_sq_pe*(cs.sin(theta_pe))**2-vy_pe**2)
+    vel_err_pe = (v_sq_pe*(cs.cos(theta_pe))**2-vx_pe**2)**2+(v_sq_pe*(cs.sin(theta_pe))**2-vy_pe**2)**2
     # vel_err_pe = -vx_pe * cs.sin(theta_pe) + vy_pe * cs.cos(theta_pe)
 
     delta_p0_move_pe = p0_next_pe - p0_pe  
@@ -208,10 +225,9 @@ def create_lipm_ocp(
         c_pe, vel_err_pe, c_dot_pe, theta_dot_pe, x_pe[10],
         delta_p0_move_pe, delta_p1_move_pe, 
         hip_err_0_pe, hip_err_1_pe, 
-        u_pe[4] - 0.5, u_pe[5:7], u_pe[7] - dt_nominal,
-        0.0
+        u_pe[4] - 0.5, u_pe[7] - dt_nominal
     )
-    cost_y_expr_e_pe = cs.vertcat(c_pe, theta_pe, c_dot_pe, theta_dot_pe, x_pe[10])
+    cost_y_expr_e_pe = cs.vertcat(c_pe, c_dot_pe, theta_dot_pe, x_pe[10])
 
     # Combine Expressions (40 elements for intermediate, 14 for terminal)
     # Define cost function: (y-y_ref).T W (y-y_ref)
@@ -226,18 +242,13 @@ def create_lipm_ocp(
     ocp.cost.W_e = np.diag(W_end_op + W_end_pe)
 
     # Reference (Updated lengths)
-    y_ref = np.zeros(40)
+    y_ref = np.zeros(34)
     y_ref[:2] = c_target
-    # y_ref[2] = theta_target
-    y_ref[20:22] = c_target
-    # y_ref[21] = theta_target
+    y_ref[17:19] = c_target
     
-    # In terminal cost I must leave the theta_target elements because for the running I used epsilon which embeds the difference, for the terminal cost I don't
-    y_ref_e = np.zeros(14)
+    y_ref_e = np.zeros(12)
     y_ref_e[:2] = c_target
-    y_ref_e[2] = theta_target 
-    y_ref_e[7:9] = c_target
-    y_ref_e[9] = theta_target
+    y_ref_e[6:8] = c_target
 
     ocp.cost.yref, ocp.cost.yref_e = y_ref, y_ref_e
 
@@ -315,29 +326,44 @@ def create_lipm_ocp(
     # theta_dot (5, 16) and time (10, 21)
     ocp.constraints.idxbx = np.array([5, 10, 16, 21]) 
 
-    # Soft Constraints (Slack Variables)
+    # ---- Soft Constraints (Slack Variables) -----
     # acados manage the soft constraints as SLACK VARIABLES
+    # We have 16 equations to be constrained in h_con, some of them must be softened to simplify the life for the solver
     # We have the soft constraint on the velocities (3) and on the distance from current and next step to hip
+
+    # [0,1,2,3]: distances of feet-hips
+    # [4,5,6]: friction cones and a==1 kept as hard
+    # [7,8,9,10]: Corners collision
+    # [11,12]: Feet collision
+    # [13]: Obstacle collision
+    # [14,15]: Local velocity limits
     idxsh_branch = [0, 1, 2, 3, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     idxsh_total = idxsh_branch + [i + 16 for i in idxsh_branch]
     ocp.constraints.idxsh = np.array(idxsh_total)
+
+    # Soft constraints on non linear constraints
+    # Z: quadratic penalty - z: linear penalty
+    # [4x Kinematic] + [7x Collision] + [2x velocities]
+    Zu_sh_branch = [1e4]*4 + [1e6]*7 + [1e3]*2
+    zu_sh_branch = [1e3]*4 + [1e5]*7 + [1e2]*2
+    Zl_sh_branch = [0.0]*4 + [0.0]*6 + [1e6] + [1e3]*2
+    zl_sh_branch = [0.0]*4 + [0.0]*6 + [1e5] + [1e2]*2
+
+
+    # Soft constraints on state limits
     # Skip the first 8 decoupling eqns for node 0
     ocp.constraints.idxsh_0 = np.array([i + 8 for i in idxsh_total])
     # theta_dot is now index 0 for op and 2 for pe
     ocp.constraints.idxsbx = np.array([0, 2])
 
     # These are the weights for the limits (upper and lower) of soft constraints
-    # Soft Weights (States first, then Nonlinear constraints)
+    # softening only the weight on theta_dot
     Zu_sbx = [1e3]*2
     zu_sbx = [1e2]*2
     Zl_sbx = [1e3]*2
     zl_sbx = [1e2]*2
 
-    Zu_sh_branch = [1e4]*4 + [1e6]*7 + [1e3]*2
-    zu_sh_branch = [1e3]*4 + [1e5]*7 + [1e2]*2
-    Zl_sh_branch = [0.0]*4 + [0.0]*6 + [1e6] + [1e3]*2
-    zl_sh_branch = [0.0]*4 + [0.0]*6 + [1e5] + [1e2]*2
-
+    
     ocp.cost.Zu = np.array(Zu_sbx + Zu_sh_branch + Zu_sh_branch)
     ocp.cost.zu = np.array(zu_sbx + zu_sh_branch + zu_sh_branch)
     ocp.cost.Zl = np.array(Zl_sbx + Zl_sh_branch + Zl_sh_branch)
@@ -360,6 +386,6 @@ def create_lipm_ocp(
     ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
     ocp.solver_options.integrator_type = 'DISCRETE'
     ocp.solver_options.nlp_solver_type = 'SQP' 
-    ocp.solver_options.nlp_solver_max_iter = 4
+    ocp.solver_options.nlp_solver_max_iter = 5
 
     return AcadosOcpSolver(ocp)

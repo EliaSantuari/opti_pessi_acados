@@ -12,7 +12,7 @@ class RobotConfig:
     off_x: float = 0.2407 # 0.2
     off_y: float = 0.134
     mu: float = 0.6 # 0.8
-    max_ext_sq: float = 0.03 # Leg extension limit squared
+    max_ext_sq: float = 0.1 # Leg extension limit squared
     # Initial state
     x_init: np.ndarray = np.array([-0.8, -0.5])
     theta_init: float = np.deg2rad(0)
@@ -33,7 +33,7 @@ class Limits:
 @dataclass
 class MPCWeights:
     # Weights for the optimistic branch (W_diag_op)
-    tracking_xy: float = 3.0       # 0-1: Tracking x, y
+    tracking_xy: float = 5.0       # 0-1: Tracking x, y
     theta_dyn: float = 10.0         # 2: theta dynamic
     vel_xy: float = 5.0             # 3-4: velocity x, y
     yaw_rate: float = 3           # 5: Yaw rate
@@ -43,10 +43,7 @@ class MPCWeights:
     alpha_weight: float = 1       # 15: Alpha
     f_diff_weight: float = 10     # 16-17: f_diff
     dt_weight: float = 10           # 18: dt
-    vel_alignment: float = 40.0    # 19: Velocity alignment
-    
-    # Pessimistic scale to avoid null-space explosion
-    pessimistic_scale: float = 1e-3
+    vel_alignment: float = 10.0    # 19: Velocity alignment
 
 
 @dataclass
@@ -62,11 +59,11 @@ class SimulationConfig:
 @dataclass
 class ObstacleConfig:
     pos_init: np.ndarray = np.array([0.1, 1.0])
-    r_obs: float = 0.05
+    r_obs: float = 0.1
     speed: float = 0.5
-    y_dot_max: float = 1
+    y_dot_max: float = 0.5
     r_circle: float = 1
-    obs_type: str = "dynamic" # "static", "dynamic", "adversarial", "circular"
+    obs_type: str = "static" # "static", "dynamic", "adversarial", "circular"
     # Dynamic
     top_pos_dyn: np.ndarray = np.array([0.1, 1])
-    bot_pos_dyn: np.ndarray = np.array([0.1, -4])
+    bot_pos_dyn: np.ndarray = np.array([0.1, -1])

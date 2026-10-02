@@ -158,18 +158,13 @@ def main():
 
 
         # ---- Update references and parameters over horizon
-        yref = np.zeros(40)
+        yref = np.zeros(34)
         yref[0:2] = sim_cfg.c_target
-        # yref[2] = theta_target
-        yref[20:22] = sim_cfg.c_target
-        # yref[22] = theta_target
+        yref[17:19] = sim_cfg.c_target
         
-        yref_e = np.zeros(14)
+        yref_e = np.zeros(12)
         yref_e[0:2] = sim_cfg.c_target
-        # yref_e[2] = sim_cfg.theta_target
-        yref_e[7:9] = sim_cfg.c_target
-        # yref_e[9] = sim_cfg.theta_target
-
+        yref_e[6:8] = sim_cfg.c_target
 
 
         # Pass the parameters of the hips in the current phase
@@ -190,7 +185,6 @@ def main():
             a_guess = dir_to_obs / dist_to_obs
             # b_guess place a line exactly in between the robot and the obstacle
             b_guess = -np.dot(a_guess, (X_sim[0:2] + obs_pos) / 2.0)
-
 
 
             # u_guess uses the ACTUAL position of the feet (X[6:10]) as guess fot eh future
@@ -220,17 +214,6 @@ def main():
         # Extract the state and the control computed by the solver
         u_opt_22 = solver.get(0, 'u')
         X_next_22 = solver.get(1, 'x')
-
-        # Check for the trajectory OP vs PE difference
-        if step == 30 and 0:
-            print(f"\n--- Trajectory OP vs PE (Step {step}) ---")
-            for k in range(N_horizon + 1):
-                x_k = solver.get(k, 'x')
-                cy_op = x_k[1]   # Y CoM optimistic
-                cy_pe = x_k[12]  # Y CoM pessimistic
-                diff = abs(cy_pe - cy_op)
-                print(f"Nodo {k}: Y_op = {cy_op:.4f} | Y_pe = {cy_pe:.4f} | Delta = {diff:.4f} m")
-
 
         # Extract only optimistic part
         u_apply = u_opt_22[0:11]

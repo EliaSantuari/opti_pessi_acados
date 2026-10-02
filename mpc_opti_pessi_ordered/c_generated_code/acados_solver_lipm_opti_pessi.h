@@ -61,9 +61,9 @@
 #define LIPM_OPTI_PESSI_NG     0
 #define LIPM_OPTI_PESSI_NBXN   0
 #define LIPM_OPTI_PESSI_NGN    0
-#define LIPM_OPTI_PESSI_NY0    40
-#define LIPM_OPTI_PESSI_NY     40
-#define LIPM_OPTI_PESSI_NYN    14
+#define LIPM_OPTI_PESSI_NY0    34
+#define LIPM_OPTI_PESSI_NY     34
+#define LIPM_OPTI_PESSI_NYN    12
 #define LIPM_OPTI_PESSI_N      8
 #define LIPM_OPTI_PESSI_NH     32
 #define LIPM_OPTI_PESSI_NHN    0
