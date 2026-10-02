@@ -490,7 +490,7 @@ def plot_simulation_results(history_X, history_U, history_obs, foot_positions_wo
     history_X=history_X,
     history_obs=history_obs,
     obs_r=obs_r,
-    interval=50,
+    interval=100,
     tail_frames=40
 )
 

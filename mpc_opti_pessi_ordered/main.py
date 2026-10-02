@@ -18,8 +18,8 @@ def main():
 
 
     # Push simulation
-    PUSH = 0
-    push_step = 10
+    PUSH = 1
+    push_step = 50
 
 
     # steps_per_phase indicates the numer of time steps after which the robot changes feet
@@ -71,26 +71,21 @@ def main():
     print("--- Starting Simulation MPC ---")
 
     for step in range(sim_cfg.sim_steps):
-        # definition of the obstacle behaviour
+        #### Definition of the obstacle behaviour ####
         if obs_cfg.obs_type == "static":
             obs_pos = obs_cfg.pos_init
         elif obs_cfg.obs_type == "dynamic":
             p_top = obs_cfg.top_pos_dyn
             p_bot = obs_cfg.bot_pos_dyn
-            
             # Vettore direzione e distanza tra i due punti
             vec = p_bot - p_top
             dist_tot = np.linalg.norm(vec)
-            
             if dist_tot > 1e-5:
                 dir_u = vec / dist_tot # Vettore unitario da top a bot
-                
                 # Distanza totale che l'ostacolo avrebbe percorso in linea retta
                 s_percorso = obs_cfg.speed * t_global
-                
                 # Calcolo della posizione nel ciclo di andata e ritorno (lunghezza totale = 2 * dist_tot)
                 s_ciclo = s_percorso % (2 * dist_tot)
-                
                 if s_ciclo <= dist_tot:
                     # Fase di andata (da top a bot)
                     obs_pos = p_top + dir_u * s_ciclo
@@ -106,34 +101,46 @@ def main():
             robot_pos = X_sim[0:2]
             dir_to_robot = robot_pos - obs_pos
             dist_to_robot = np.linalg.norm(dir_to_robot)
-
             if dist_to_robot > 1e-3:
                 dir_to_robot = dir_to_robot / dist_to_robot
-
             dt_step = dt_chosen if 'dt_chosen' in locals() else (limits.dt_max)
-
             obs_pos = obs_pos + dir_to_robot * obs_cfg.speed * dt_step
-
         elif obs_cfg.obs_type == "circular":
-            # Velocità angolare (omega = v / r) per mantenere coerente obs_cfg.speed
-            omega = obs_cfg.speed / obs_cfg.r_circle 
-            
-            # Calcoliamo il centro sfalsato rispetto alla posizione iniziale 
-            # affinché a t_global=0 l'ostacolo parta esattamente da pos_init
-            center_x = obs_cfg.pos_init[0] - obs_cfg.r_circle
-            center_y = obs_cfg.pos_init[1]
-            
-            # Equazioni parametriche del cerchio
-            obs_pos = np.array([
-                center_x + obs_cfg.r_circle * np.cos(omega * t_global),
-                center_y + obs_cfg.r_circle * np.sin(omega * t_global)
-            ])
+            # Estraiamo centro e posizione iniziale
+            center_x, center_y = obs_cfg.center[0], obs_cfg.center[1]
+            start_x, start_y = obs_cfg.pos_init[0], obs_cfg.pos_init[1]
+            # 1. Calcoliamo il raggio effettivo come distanza tra centro e partenza
+            dx = start_x - center_x
+            dy = start_y - center_y
+            radius = np.sqrt(dx**2 + dy**2)
+            # Evitiamo divisioni per zero se partenza e centro coincidono
+            if radius < 1e-5:
+                obs_pos = np.array([start_x, start_y])
+            else:
+                # 2. Calcoliamo l'angolo di partenza (fase iniziale) per t=0
+                theta_0 = np.arctan2(dy, dx)
+                # 3. Velocità angolare (omega = v / r)
+                # Il segno definisce il verso (es. positivo = antiorario, negativo = orario)
+                omega = obs_cfg.speed / radius 
+                # 4. Equazioni parametriche del cerchio con fase iniziale
+                obs_pos = np.array([
+                    center_x + radius * np.cos(omega * t_global + theta_0),
+                    center_y + radius * np.sin(omega * t_global + theta_0)
+                ])
         history_obs.append(obs_pos.copy())
 
-        # Push
-        if step == push_step and PUSH:
-            X_sim[3] -= 0.3
-            X_sim[4] -= 0.0
+        # if step == push_step and PUSH:
+        #     # Parametri fisici della spinta
+        #     F_push_x = -100.0  # Spinta di 100 Newton (circa 10 kg) all'indietro
+        #     F_push_y = -50.0     # Nessuna spinta laterale
+        #     dt_push = 0.1      # Durata stimata dell'impatto (100 millisecondi)
+        #     # Calcolo della variazione di velocità basata sulla massa
+        #     delta_vx = (F_push_x * dt_push) / robot_cfg.m
+        #     delta_vy = (F_push_y * dt_push) / robot_cfg.m
+        #     # Applica l'impulso
+        #     X_sim[3] += delta_vx
+        #     X_sim[4] += delta_vy
+        #     print(f"Applied force. Delta Vx: {delta_vx:.3f} m/s, Delta Vy: {delta_vy:.3f} m/s")
 
         X_sim[10] = 0.0
         X_aug = np.concatenate([X_sim, X_sim])
