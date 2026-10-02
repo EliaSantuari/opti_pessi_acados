@@ -33,7 +33,7 @@ class Limits:
 @dataclass
 class MPCWeights:
     # Weights for the optimistic branch (W_diag_op)
-    tracking_xy: float = 10.0       # 0-1: Tracking x, y
+    tracking_xy: float = 3.0       # 0-1: Tracking x, y
     theta_dyn: float = 10.0         # 2: theta dynamic
     vel_xy: float = 5.0             # 3-4: velocity x, y
     yaw_rate: float = 3           # 5: Yaw rate
@@ -62,8 +62,11 @@ class SimulationConfig:
 @dataclass
 class ObstacleConfig:
     pos_init: np.ndarray = np.array([0.1, 1.0])
-    r_obs: float = 0.2
-    speed: float = 1
-    y_dot_max: float = 0.3
+    r_obs: float = 0.05
+    speed: float = 0.5
+    y_dot_max: float = 1
     r_circle: float = 1
-    obs_type: str = "static" # "static", "dynamic", "adversarial", "circular"
+    obs_type: str = "dynamic" # "static", "dynamic", "adversarial", "circular"
+    # Dynamic
+    top_pos_dyn: np.ndarray = np.array([0.1, 1])
+    bot_pos_dyn: np.ndarray = np.array([0.1, -4])

@@ -1,10 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from config import RobotConfig, SimulationConfig, Limits
+from config import RobotConfig, SimulationConfig, Limits, ObstacleConfig
 
 robot_cfg = RobotConfig()
 sim_cfg = SimulationConfig()
 limits = Limits()
+obs_cfg = ObstacleConfig()
 
 def draw_robot(ax, c_x, c_y, theta, alpha=0.3):
     """Draws the shape of the robot and its orientation"""
@@ -218,8 +219,7 @@ def plot_simulation_results(history_X, history_U, history_obs, foot_positions_wo
     ax_clean.grid(True)
     ax_clean.axis('equal')
 
-
-# --- 1. Trajectory & Robot Shape (Tutti i piedi campionati collegati) ---
+    # --- 1. Trajectory & Robot Shape (Tutti i piedi campionati collegati) ---
     fig1, ax1 = plt.subplots(figsize=(10, 8))
     
     # 1. Traiettoria del CoM
@@ -230,8 +230,16 @@ def plot_simulation_results(history_X, history_U, history_obs, foot_positions_wo
     ax1.plot(traj[0, 0], traj[0, 1], 'bs', markersize=7, label='Start', zorder=3)
     ax1.plot(c_target[0], c_target[1], 'v', color='blue', markersize=7, label='Goal', zorder=3)
 
-    # 3. Ostacolo
-    ax1.plot(obs_pos[0], obs_pos[1], 'rs', markersize=7, label='Obstacle', zorder=3)
+    # ---------------------------------------------------------
+    # 3. Ostacolo (Traiettoria e posizioni durante la simulazione)
+    # Sostituisci `obs_traj` con il nome del tuo array se diverso (es. `obs_pos` se è 2D)
+    # Disegna la linea continua della traiettoria dell'ostacolo
+    ax1.plot(traj_obs[:, 0], traj_obs[:, 1], color='red', linestyle='--', linewidth=1.5, label='Obs Path', zorder=2)
+    
+    # Disegna la posizione dell'ostacolo in sincronia con il campionamento del robot
+    ax1.scatter(traj_obs[::draw_interval, 0], traj_obs[::draw_interval, 1], 
+                c='red', marker='s', s=40, label='Obstacle', alpha=0.7, zorder=3)
+    # ---------------------------------------------------------
 
     # 4. Piedi p0 e p1
     p0_traj = traj[:, 6:8]
@@ -260,6 +268,33 @@ def plot_simulation_results(history_X, history_U, history_obs, foot_positions_wo
     ax1.legend(loc='upper left', fontsize=11)
     ax1.grid(True, linestyle='-', alpha=0.6)
     ax1.axis('equal')
+
+
+
+    #--- 7. Plotting della Distanza CoM - Ostacolo ---
+    n_steps = min(len(history_X), len(history_obs))
+    
+    # CORRETTO: Rinominata la variabile per evitare il "variable shadowing"
+    com_obs_distances = []
+    for i in range(n_steps):
+        com_pos = history_X[i][0:2] 
+        obs_pos = history_obs[i]    
+        dist = np.linalg.norm(com_pos - obs_pos)
+        com_obs_distances.append(dist)
+    
+    fig_dist, ax_dist = plt.subplots(figsize=(8, 5))
+    ax_dist.plot(range(n_steps), com_obs_distances, label='Distanza CoM - Ostacolo', color='blue', linewidth=2)
+    
+    ax_dist.axhline(y=obs_r, color='red', linestyle='--', label='Raggio Ostacolo (Impatto)')
+
+    ax_dist.set_xlabel('Step di simulazione')
+    ax_dist.set_ylabel('Distanza (m)')
+    ax_dist.set_title('Distanza Robot-Ostacolo nel tempo')
+    ax_dist.grid(True)
+    ax_dist.legend()
+    
+
+
 
     plt.tight_layout()
     plt.show()

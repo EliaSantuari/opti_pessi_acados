@@ -75,7 +75,31 @@ def main():
         if obs_cfg.obs_type == "static":
             obs_pos = obs_cfg.pos_init
         elif obs_cfg.obs_type == "dynamic":
-            obs_pos = obs_cfg.pos_init + np.array([-obs_cfg.speed * t_global * 0.0 , -obs_cfg.speed * t_global])
+            p_top = obs_cfg.top_pos_dyn
+            p_bot = obs_cfg.bot_pos_dyn
+            
+            # Vettore direzione e distanza tra i due punti
+            vec = p_bot - p_top
+            dist_tot = np.linalg.norm(vec)
+            
+            if dist_tot > 1e-5:
+                dir_u = vec / dist_tot # Vettore unitario da top a bot
+                
+                # Distanza totale che l'ostacolo avrebbe percorso in linea retta
+                s_percorso = obs_cfg.speed * t_global
+                
+                # Calcolo della posizione nel ciclo di andata e ritorno (lunghezza totale = 2 * dist_tot)
+                s_ciclo = s_percorso % (2 * dist_tot)
+                
+                if s_ciclo <= dist_tot:
+                    # Fase di andata (da top a bot)
+                    obs_pos = p_top + dir_u * s_ciclo
+                else:
+                    # Fase di ritorno (da bot a top)
+                    obs_pos = p_bot - dir_u * (s_ciclo - dist_tot)
+            else:
+                # Se i due punti coincidono
+                obs_pos = p_top
         elif obs_cfg.obs_type == "adversarial":
             if step == 0:
                 obs_pos = obs_cfg.pos_init
@@ -142,9 +166,11 @@ def main():
         
         yref_e = np.zeros(14)
         yref_e[0:2] = sim_cfg.c_target
-        yref_e[2] = sim_cfg.theta_target
+        # yref_e[2] = sim_cfg.theta_target
         yref_e[7:9] = sim_cfg.c_target
-        yref_e[9] = sim_cfg.theta_target
+        # yref_e[9] = sim_cfg.theta_target
+
+
 
         # Pass the parameters of the hips in the current phase
         for k in range(sim_cfg.N_horizon):
@@ -157,26 +183,27 @@ def main():
             solver.set(k, 'p', p_val)
             solver.set(k, 'yref', yref) # Update the intermediate target
 
-            if step == 0:
-                # Initialization of the line (WARM START) (line pointing towards the obstacle)
-                dir_to_obs = obs_pos - X_sim[0:2]
-                dist_to_obs = np.linalg.norm(dir_to_obs) + 1e-5
-                
-                # Normal points towards the obstacle
-                a_guess = dir_to_obs / dist_to_obs
-                # b_guess place a line exactly in between the robot and the obstacle
-                b_guess = -np.dot(a_guess, (X_sim[0:2] + obs_pos) / 2.0)
-                
-                # u_guess uses the ACTUAL position of the feet (X[6:10]) as guess fot eh future
-                u_guess_11 = np.array([
-                    X_sim[6], X_sim[7], X_sim[8], X_sim[9],  # p0_next, p1_next 
-                    0.5,                     # alpha
-                    0.0, 0.0,                # f_diff
-                    0.0625,                  # dt_var
-                    a_guess[0], a_guess[1],  # ax, ay
-                    b_guess                  # b 
-                ])
-                solver.set(k, 'u', np.concatenate([u_guess_11, u_guess_11]))
+            # Initialization of the line (WARM START) (line pointing towards the obstacle)
+            dir_to_obs = obs_pos - X_sim[0:2]
+            dist_to_obs = np.linalg.norm(dir_to_obs) + 1e-5
+            # Normal points towards the obstacle
+            a_guess = dir_to_obs / dist_to_obs
+            # b_guess place a line exactly in between the robot and the obstacle
+            b_guess = -np.dot(a_guess, (X_sim[0:2] + obs_pos) / 2.0)
+
+
+
+            # u_guess uses the ACTUAL position of the feet (X[6:10]) as guess fot eh future
+            u_guess_11 = np.array([
+                X_sim[6], X_sim[7], X_sim[8], X_sim[9],  # p0_next, p1_next 
+                0.5,                     # alpha
+                0.0, 0.0,                # f_diff
+                limits.dt_max,                  # dt_var
+                a_guess[0], a_guess[1],  # ax, ay
+                b_guess                  # b 
+            ])
+            solver.set(k, 'u', np.concatenate([u_guess_11, u_guess_11]))
+
 
         # Set the parameter of the final step because is missing
         solver.set(sim_cfg.N_horizon, 'p', p_val)
