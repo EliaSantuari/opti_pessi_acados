@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import numpy as np
 
 
+
 @dataclass
 class RobotConfig:
     # Geometrical dimensions
@@ -14,7 +15,7 @@ class RobotConfig:
     mu: float = 0.6 # 0.8
     max_ext_sq: float = 0.1 # Leg extension limit squared
     # Initial state
-    x_init: np.ndarray = np.array([-0.8, -0.5])
+    x_init: np.ndarray = np.array([-1, -0.5])
     theta_init: float = np.deg2rad(0)
 
 
@@ -51,7 +52,7 @@ class SimulationConfig:
     N_horizon: int = 7
     sim_steps: int = 400
     steps_per_phase: int = 1
-    c_target: np.ndarray = np.array([1.0, 0.2])
+    c_target: np.ndarray = np.array([3.0, 2.0])
     theta_target: float = np.deg2rad(0)
     solver_type: str = 'SQP_RTI' # SQP, SQP_RTI
     max_iter: int = None
@@ -61,13 +62,13 @@ class SimulationConfig:
 @dataclass
 class ObstacleConfig:
     # General
-    pos_init: np.ndarray = np.array([0.5, 0.5]) #np.array([0.1, 1.0])
-    r_obs: float = 0.21
+    pos_init: np.ndarray = np.array([1.5, 1.5]) #np.array([0.1, 1.0])
+    r_obs: float = 0.2
     speed: float = 0.35
     y_dot_max: float = 0.35
-    obs_type: str = "dynamic" # "static", "dynamic", "adversarial", "circular"
+    obs_type: str = "static" # "static", "dynamic", "adversarial", "circular"
     # Dynamic
     top_pos_dyn: np.ndarray = np.array([0.1, 0.5])
-    bot_pos_dyn: np.ndarray = np.array([0.1, -1])
+    bot_pos_dyn: np.ndarray = np.array([0.1, -0.5])
     # Circular
     center: np.ndarray = np.array([1.0, 0.2])

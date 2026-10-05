@@ -158,7 +158,7 @@ def create_lipm_ocp(
     ocp = AcadosOcp()
     ocp.model = model
     ocp.solver_options.N_horizon = N
-    ocp.solver_options.tf = N * 0.05 
+    ocp.solver_options.tf = N * dt_nominal
 
     # --- COST FUNCTION FOR OPTIMISTIC BRANCH (Main Objective) ---
     c_op, theta_op = x_op[0:2], x_op[2]
@@ -286,7 +286,7 @@ def create_lipm_ocp(
         eq_p = [cs.dot(a, p0_next) + b, cs.dot(a, p1_next) + b]  
 
         # 4) Dynamic obstacle should be in the positive semiplane and distant at least r_obs
-        eq_obs = cs.dot(a, y0_obs) + b - (r_obstacle * (1 + 0.8))
+        eq_obs = cs.dot(a, y0_obs) + b - r_obstacle
 
         # 5) Compute the local velocities
         v_loc_x = c_dot[0] * cs.cos(theta) + c_dot[1] * cs.sin(theta)
@@ -298,7 +298,9 @@ def create_lipm_ocp(
     con_op = compute_constraints(x_op, u_op, c_next_op, theta_next_op, f0_op, f1_op, r_obs)
 
     # 2. Pessimistic uses dynamic growing radius
-    r_dynamic = r_obs + y_dot_max * x_pe[10]
+    t_next_pe = x_pe[10] #+ u_pe[7]
+    safety_margin = 0.2
+    r_dynamic = r_obs + safety_margin + y_dot_max * t_next_pe
     con_pe = compute_constraints(x_pe, u_pe, c_next_pe, theta_next_pe, f0_pe, f1_pe, r_dynamic)
 
     model.con_h_expr = cs.vertcat(con_op, con_pe) # 28 equations

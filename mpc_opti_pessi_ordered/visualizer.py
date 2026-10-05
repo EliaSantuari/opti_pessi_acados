@@ -471,6 +471,166 @@ def plot_simulation_results(history_X, history_U, history_obs, foot_positions_wo
 
 
 
+        # --- 8. Distanza delle quattro anche dal bordo dell'ostacolo ---
+    n = min(len(traj), len(traj_obs))
+
+    if n > 0:
+        # Offset delle anche nel riferimento locale del robot.
+        # Verifica che i nomi coincidano con gait_planner.hip_offsets.
+        hip_offsets = {
+            "FL": np.array([ robot_cfg.off_x,  robot_cfg.off_y]),
+            "FR": np.array([ robot_cfg.off_x, -robot_cfg.off_y]),
+            "RL": np.array([-robot_cfg.off_x,  robot_cfg.off_y]),
+            "RR": np.array([-robot_cfg.off_x, -robot_cfg.off_y]),
+        }
+
+        com = traj[:n, 0:2]
+        theta = traj[:n, 2]
+        obs_centers = traj_obs[:n, 0:2]
+
+        cos_th = np.cos(theta)
+        sin_th = np.sin(theta)
+
+        colors = {
+            "FL": "blue",
+            "FR": "cyan",
+            "RL": "green",
+            "RR": "orange",
+        }
+
+        fig_hips, ax_hips = plt.subplots(figsize=(11, 6))
+
+        for leg, offset in hip_offsets.items():
+            # Posizione globale dell'anca:
+            # hip_world = com + R(theta) @ offset
+            hip_world = com + np.column_stack((
+                cos_th * offset[0] - sin_th * offset[1],
+                sin_th * offset[0] + cos_th * offset[1],
+            ))
+
+            # Distanza dal centro meno il raggio fisico.
+            clearance = (
+                np.linalg.norm(hip_world - obs_centers, axis=1)
+                - obs_r
+            )
+
+            ax_hips.plot(
+                np.arange(n),
+                clearance,
+                color=colors[leg],
+                linewidth=2,
+                label=f"Anca {leg}",
+            )
+
+        ax_hips.axhline(
+            0.0,
+            color="red",
+            linestyle="--",
+            linewidth=2,
+            label="Bordo ostacolo",
+        )
+
+        ax_hips.set_title("Distanza delle anche dal bordo dell'ostacolo")
+        ax_hips.set_xlabel("Step di simulazione")
+        ax_hips.set_ylabel("Distanza dal bordo [m]")
+        ax_hips.grid(True, alpha=0.4)
+        ax_hips.legend()
+        fig_hips.tight_layout()
+
+
+
+        # --- Distanza firmata corpo robot - bordo ostacolo ---
+    n = min(len(traj), len(traj_obs))
+
+    if n > 0:
+        com = traj[:n, 0:2]
+        theta = traj[:n, 2]
+        obs_centers = traj_obs[:n, 0:2]
+
+        # Centro dell'ostacolo rispetto al centro del robot.
+        delta = obs_centers - com
+
+        # Trasformazione nel riferimento locale del robot:
+        # obs_local = R(theta).T @ delta
+        cos_th = np.cos(theta)
+        sin_th = np.sin(theta)
+
+        obs_local = np.column_stack((
+            cos_th * delta[:, 0] + sin_th * delta[:, 1],
+            -sin_th * delta[:, 0] + cos_th * delta[:, 1],
+        ))
+
+        # Semidimensioni del corpo rettangolare.
+        half_size = np.array([
+            robot_cfg.off_x,
+            robot_cfg.off_y,
+        ])
+
+        # Distanza firmata del centro ostacolo dal rettangolo.
+        q = np.abs(obs_local) - half_size
+
+        outside_distance = np.linalg.norm(
+            np.maximum(q, 0.0),
+            axis=1,
+        )
+
+        inside_distance = np.minimum(
+            np.max(q, axis=1),
+            0.0,
+        )
+
+        signed_distance_to_body = outside_distance + inside_distance
+
+        # Distanza firmata tra rettangolo e disco.
+        body_clearance = signed_distance_to_body - obs_r
+
+        # Tempi degli stati registrati DOPO ciascun controllo.
+        time = np.cumsum(traj_u[:n, 7])
+
+        fig_body, ax_body = plt.subplots(figsize=(11, 6))
+
+        ax_body.plot(
+            time,
+            body_clearance,
+            color="blue",
+            linewidth=2,
+            label="Distanza corpo–ostacolo",
+        )
+
+        ax_body.axhline(
+            0.0,
+            color="red",
+            linestyle="--",
+            linewidth=2,
+            label="Contatto",
+        )
+
+        ax_body.fill_between(
+            time,
+            body_clearance,
+            0.0,
+            where=body_clearance < 0.0,
+            color="red",
+            alpha=0.25,
+            interpolate=True,
+            label="Sovrapposizione",
+        )
+
+        ax_body.set_title("Distanza del corpo dal bordo dell'ostacolo")
+        ax_body.set_xlabel("Tempo [s]")
+        ax_body.set_ylabel("Distanza firmata [m]")
+        ax_body.grid(True, alpha=0.4)
+        ax_body.legend()
+        fig_body.tight_layout()
+
+        print(
+            "Distanza minima corpo–ostacolo: "
+            f"{np.min(body_clearance):.3f} m"
+        )
+
+
+
+
     #--- 7. Plotting della Distanza CoM - Ostacolo ---
     n_steps = min(len(history_X), len(history_obs))
     
@@ -499,7 +659,9 @@ def plot_simulation_results(history_X, history_U, history_obs, foot_positions_wo
     obs_r=obs_r,
     interval=100,
     tail_frames=40
-)
+    )
+
+
 
 
     plt.tight_layout()

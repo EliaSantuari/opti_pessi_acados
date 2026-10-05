@@ -6,6 +6,69 @@ from gait_planner import GaitPlanner
 from visualizer import plot_simulation_results
 from config import RobotConfig, MPCWeights, SimulationConfig, ObstacleConfig, Limits
 
+#### Definition of the obstacle behaviour ####
+def get_obs_position(t, obs_cfg, robot_pos=None, t_current=0.0):
+    if obs_cfg.obs_type == "static":
+        return obs_cfg.pos_init.copy()
+        
+    elif obs_cfg.obs_type == "dynamic":
+        p_top = obs_cfg.top_pos_dyn
+        p_bot = obs_cfg.bot_pos_dyn
+        # Vettore direzione e distanza tra i due punti
+        vec = p_bot - p_top
+        dist_tot = np.linalg.norm(vec)
+        if dist_tot > 1e-5:
+            dir_u = vec / dist_tot # Vettore unitario da top a bot
+                # Distanza totale che l'ostacolo avrebbe percorso in linea retta
+            s_percorso = obs_cfg.speed * t # Calcolo della posizione nel ciclo di andata e ritorno (lunghezza totale = 2 * dist_tot)
+            s_ciclo = s_percorso % (2 * dist_tot)
+            if s_ciclo <= dist_tot: # Fase di andata (da top a bot)
+                return p_top + dir_u * s_ciclo
+            else: # Fase di ritorno (da bot a top)
+                return p_bot - dir_u * (s_ciclo - dist_tot)
+        return p_top.copy()
+        
+    elif obs_cfg.obs_type == "circular":
+        # Estraiamo centro e posizione iniziale
+        center_x, center_y = obs_cfg.center[0], obs_cfg.center[1]
+        start_x, start_y = obs_cfg.pos_init[0], obs_cfg.pos_init[1]
+        # 1. Calcoliamo il raggio effettivo come distanza tra centro e partenza
+        dx, dy = start_x - center_x, start_y - center_y
+        radius = np.sqrt(dx**2 + dy**2)
+        # Evitiamo divisioni per zero se partenza e centro coincidono
+        if radius < 1e-5:
+            return np.array([start_x, start_y])
+        # 2. Calcoliamo l'angolo di partenza (fase iniziale) per t=0
+        theta_0 = np.arctan2(dy, dx)
+        # 3. Velocità angolare (omega = v / r)
+                        # Il segno definisce il verso (es. positivo = antiorario, negativo = orario)
+        omega = obs_cfg.speed / radius 
+        # 4. Equazioni parametriche del cerchio con fase iniziale
+        return np.array([
+            center_x + radius * np.cos(omega * t + theta_0),
+            center_y + radius * np.sin(omega * t + theta_0)
+        ])
+        
+    elif obs_cfg.obs_type == "adversarial":
+        # Per l'adversarial è più complesso predire il futuro perché dipende dal robot,
+        # per semplicità manteniamo l'ultima posizione nota
+        if robot_pos is None:
+            return obs_cfg.pos_init.copy()
+        dir_to_robot = robot_pos - obs_cfg.pos_init
+        dist = np.linalg.norm(dir_to_robot)
+        if dist > 1e-3:
+            dir_to_robot = dir_to_robot / dist
+        return obs_cfg.pos_init + dir_to_robot * obs_cfg.speed * (t-t_current)
+
+
+
+
+
+
+
+
+
+
 
 
 def main():
@@ -71,63 +134,19 @@ def main():
     print("--- Starting Simulation MPC ---")
 
     for step in range(sim_cfg.sim_steps):
-        #### Definition of the obstacle behaviour ####
-        if obs_cfg.obs_type == "static":
-            obs_pos = obs_cfg.pos_init
-        elif obs_cfg.obs_type == "dynamic":
-            p_top = obs_cfg.top_pos_dyn
-            p_bot = obs_cfg.bot_pos_dyn
-            # Vettore direzione e distanza tra i due punti
-            vec = p_bot - p_top
-            dist_tot = np.linalg.norm(vec)
-            if dist_tot > 1e-5:
-                dir_u = vec / dist_tot # Vettore unitario da top a bot
-                # Distanza totale che l'ostacolo avrebbe percorso in linea retta
-                s_percorso = obs_cfg.speed * t_global
-                # Calcolo della posizione nel ciclo di andata e ritorno (lunghezza totale = 2 * dist_tot)
-                s_ciclo = s_percorso % (2 * dist_tot)
-                if s_ciclo <= dist_tot:
-                    # Fase di andata (da top a bot)
-                    obs_pos = p_top + dir_u * s_ciclo
-                else:
-                    # Fase di ritorno (da bot a top)
-                    obs_pos = p_bot - dir_u * (s_ciclo - dist_tot)
-            else:
-                # Se i due punti coincidono
-                obs_pos = p_top
-        elif obs_cfg.obs_type == "adversarial":
-            if step == 0:
-                obs_pos = obs_cfg.pos_init
-            robot_pos = X_sim[0:2]
-            dir_to_robot = robot_pos - obs_pos
-            dist_to_robot = np.linalg.norm(dir_to_robot)
-            if dist_to_robot > 1e-3:
-                dir_to_robot = dir_to_robot / dist_to_robot
-            dt_step = dt_chosen if 'dt_chosen' in locals() else (limits.dt_max)
-            obs_pos = obs_pos + dir_to_robot * obs_cfg.speed * dt_step
-        elif obs_cfg.obs_type == "circular":
-            # Estraiamo centro e posizione iniziale
-            center_x, center_y = obs_cfg.center[0], obs_cfg.center[1]
-            start_x, start_y = obs_cfg.pos_init[0], obs_cfg.pos_init[1]
-            # 1. Calcoliamo il raggio effettivo come distanza tra centro e partenza
-            dx = start_x - center_x
-            dy = start_y - center_y
-            radius = np.sqrt(dx**2 + dy**2)
-            # Evitiamo divisioni per zero se partenza e centro coincidono
-            if radius < 1e-5:
-                obs_pos = np.array([start_x, start_y])
-            else:
-                # 2. Calcoliamo l'angolo di partenza (fase iniziale) per t=0
-                theta_0 = np.arctan2(dy, dx)
-                # 3. Velocità angolare (omega = v / r)
-                # Il segno definisce il verso (es. positivo = antiorario, negativo = orario)
-                omega = obs_cfg.speed / radius 
-                # 4. Equazioni parametriche del cerchio con fase iniziale
-                obs_pos = np.array([
-                    center_x + radius * np.cos(omega * t_global + theta_0),
-                    center_y + radius * np.sin(omega * t_global + theta_0)
-                ])
-        history_obs.append(obs_pos.copy())
+        x_hist_step = np.copy(X_sim)
+        theta = X_sim[2]
+        vx_glob = X_sim[3]
+        vy_glob = X_sim[4]
+
+        x_hist_step[3] = vx_glob * np.cos(theta) + vy_glob * np.sin(theta)
+        x_hist_step[4] = -vx_glob * np.sin(theta) + vy_glob * np.cos(theta)
+
+        history_X.append(x_hist_step)
+
+
+        obs_pos_current = get_obs_position(t_global, obs_cfg, X_sim[0:2], t_current=t_global)
+        history_obs.append(obs_pos_current.copy())
 
         # if step == push_step and PUSH:
         #     # Parametri fisici della spinta
@@ -142,11 +161,6 @@ def main():
         #     X_sim[4] += delta_vy
         #     print(f"Applied force. Delta Vx: {delta_vx:.3f} m/s, Delta Vy: {delta_vy:.3f} m/s")
 
-        X_sim[10] = 0.0
-        X_aug = np.concatenate([X_sim, X_sim])
-        # Set initial state
-        solver.set(0, "lbx", X_aug)
-        solver.set(0, "ubx", X_aug)
 
         # ---- Gait and hips managing ----
         # Compute the current phase of the gait from step
@@ -163,6 +177,13 @@ def main():
                 X_sim[8:10] = new_hips[2:4]
             previous_phase = current_phase
 
+        X_sim[10] = 0.0
+        X_aug = np.concatenate([X_sim, X_sim])
+        # Set initial state
+        solver.set(0, "lbx", X_aug)
+        solver.set(0, "ubx", X_aug)
+        solver.set(0, "x", X_aug)
+
 
         # ---- Update references and parameters over horizon
         yref = np.zeros(34)
@@ -173,25 +194,36 @@ def main():
         yref_e[0:2] = sim_cfg.c_target
         yref_e[6:8] = sim_cfg.c_target
 
+        # Estimate of the dt
+        dt_guess = (limits.dt_min + limits.dt_max) / (2*sim_cfg.steps_per_phase)
+    
 
         # Pass the parameters of the hips in the current phase
         for k in range(sim_cfg.N_horizon):
             offset0 = gait_planner.hip_offsets[current_gait[0]]
             offset1 = gait_planner.hip_offsets[current_gait[1]]
 
+            # Prevision -> compute where the obstacle will be in the next step t_k
+            t_k = t_global + k * dt_guess
+            ################ CHEAT!!!! ################
+            obs_pos_k = get_obs_position(t_k, obs_cfg, X_sim[0:2], t_current=t_global)
+
+            # Virtual paraurti
+            virtual_r_obs = obs_cfg.r_obs * 1.8
+
             # Parameters: [hip0_x, hip0_y, hip1_x, hip1_y, obs_x, obs_y, obs_cfg.r_obs]
-            p_val = np.hstack([offset0, offset1, obs_pos, obs_cfg.r_obs, obs_cfg.y_dot_max])
+            p_val = np.hstack([offset0, offset1, obs_pos_k, virtual_r_obs, obs_cfg.y_dot_max])
 
             solver.set(k, 'p', p_val)
             solver.set(k, 'yref', yref) # Update the intermediate target
 
             # Initialization of the line (WARM START) (line pointing towards the obstacle)
-            dir_to_obs = obs_pos - X_sim[0:2]
+            dir_to_obs = obs_pos_k - X_sim[0:2]
             dist_to_obs = np.linalg.norm(dir_to_obs) + 1e-5
             # Normal points towards the obstacle
             a_guess = dir_to_obs / dist_to_obs
             # b_guess place a line exactly in between the robot and the obstacle
-            b_guess = -np.dot(a_guess, (X_sim[0:2] + obs_pos) / 2.0)
+            b_guess = -np.dot(a_guess, (X_sim[0:2] + obs_pos_k) / 2.0)
 
 
             # u_guess uses the ACTUAL position of the feet (X[6:10]) as guess fot eh future
@@ -204,7 +236,6 @@ def main():
                 b_guess                  # b 
             ])
             solver.set(k, 'u', np.concatenate([u_guess_11, u_guess_11]))
-
 
         # Set the parameter of the final step because is missing
         solver.set(sim_cfg.N_horizon, 'p', p_val)
@@ -220,17 +251,26 @@ def main():
 
         # Extract the state and the control computed by the solver
         u_opt_22 = solver.get(0, 'u')
-        X_next_22 = solver.get(1, 'x')
 
         # Extract only optimistic part
         u_apply = u_opt_22[0:11]
-        X_next_sim = X_next_22[0:11]
+        # X_next_sim = X_next_22[0:11]
+        X_next_sim = solver.get(1, "x")[0:11]
 
         # ---- Logging -----
         # Save dt_var
         dt_chosen = u_apply[7]
         t_global += dt_chosen
-        
+
+
+        # Update for adversarial obstacle
+        if obs_cfg.obs_type == "adversarial":
+            dir_to_robot = X_sim[0:2] - obs_cfg.pos_init
+            dist = np.linalg.norm(dir_to_robot)
+            if dist > 1e-3:
+                dir_to_robot = dir_to_robot / dist
+            obs_cfg.pos_init += dir_to_robot * obs_cfg.speed * dt_chosen
+
         # Save footprints
         if step % gait_planner.steps_per_phase == 0:
             foot_positions_world[current_gait[0]].append(u_apply[0:2])
@@ -249,15 +289,7 @@ def main():
         dist_p0_next.append(np.linalg.norm(u_apply[0:2] - hips_next[0:2]))
         dist_p1_next.append(np.linalg.norm(u_apply[2:4] - hips_next[2:4]))
 
-        x_hist_step = np.copy(X_next_sim)
-        theta = X_next_sim[2]
-        vx_glob = X_next_sim[3]
-        vy_glob = X_next_sim[4]
-
-        x_hist_step[3] = vx_glob * np.cos(theta) + vy_glob * np.sin(theta)
-        x_hist_step[4] = -vx_glob * np.sin(theta) + vy_glob * np.cos(theta)
-
-        history_X.append(x_hist_step)
+        
         history_U.append(u_apply)
 
         # Print some data for debugging and monitoring
