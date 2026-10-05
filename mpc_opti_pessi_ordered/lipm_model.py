@@ -281,13 +281,12 @@ def create_lipm_ocp(
         eq_norm_a = a[0]**2 + a[1]**2 
 
         # 2) 4 angles of the robot must stay in the negative semiplane(we  don't want the robot to be inside the obstacle)
-        # Assuming the shoulders +/- 0.2 with respect to CoM
         corners = [cs.vertcat(off_x, off_y), cs.vertcat(-off_x, off_y), cs.vertcat(-off_x, -off_y), cs.vertcat(off_x, -off_y)]
         eq_s = [cs.dot(a, c_next + R_th @ loc) + b for loc in corners]
         eq_p = [cs.dot(a, p0_next) + b, cs.dot(a, p1_next) + b]  
 
         # 4) Dynamic obstacle should be in the positive semiplane and distant at least r_obs
-        eq_obs = cs.dot(a, y0_obs) + b - (r_obstacle * (1 + 0.5))
+        eq_obs = cs.dot(a, y0_obs) + b - (r_obstacle * (1 + 0.8))
 
         # 5) Compute the local velocities
         v_loc_x = c_dot[0] * cs.cos(theta) + c_dot[1] * cs.sin(theta)

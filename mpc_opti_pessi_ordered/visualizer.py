@@ -77,6 +77,13 @@ def animate_robot_feet(history_X, history_obs, obs_r,
     ax.set_title("Animazione CoM, impronte dei piedi e ostacolo")
     ax.grid(True, alpha=0.4)
 
+    # Obiettivo
+    target_x = float(sim_cfg.c_target[0])
+    target_y = float(sim_cfg.c_target[1])
+    ax.plot(sim_cfg.c_target[0], sim_cfg.c_target[1], marker="x", markersize=10, markeredgewidth=2.5,
+            color="dodgerblue", zorder=5, label=f"Target {target_x, target_y}")
+
+
     # Traiettorie recenti
     com_line, = ax.plot([], [], color="black", linewidth=1.8,
                         alpha=0.65, label="Traiettoria CoM")
