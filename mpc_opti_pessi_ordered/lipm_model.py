@@ -85,7 +85,7 @@ def create_lipm_ocp(
     x_pe = cs.SX.sym('x_pe', 11)
     x = cs.vertcat(x_op, x_pe)
     
-    u_op = cs.SX.sym('u_op', 11) # p0next_x, p0next_y, p1next_x, p1next_y, alpha, f_diff_x, f_diff_y, dt, ax, ay, b
+    u_op = cs.SX.sym('u_op', 11) # p0next_x, p0next_y, p1next_x, p1next_y, alpha, beta, gamma, dt, ax, ay, b
     u_pe = cs.SX.sym('u_pe', 11)
     u = cs.vertcat(u_op, u_pe)
     
@@ -194,7 +194,7 @@ def create_lipm_ocp(
         c_op, vel_err_op, c_dot_op, theta_dot_op, x_op[10],
         delta_p0_move_op, delta_p1_move_op, 
         hip_err_0_op, hip_err_1_op, 
-        u_op[4] - 0.5, u_op[7] - dt_nominal
+        u_op[4] - 0.5, u_op[7] - dt_max
     )
     cost_y_expr_e_op = cs.vertcat(c_op, c_dot_op, theta_dot_op, x_op[10])
 
@@ -225,7 +225,7 @@ def create_lipm_ocp(
         c_pe, vel_err_pe, c_dot_pe, theta_dot_pe, x_pe[10],
         delta_p0_move_pe, delta_p1_move_pe, 
         hip_err_0_pe, hip_err_1_pe, 
-        u_pe[4] - 0.5, u_pe[7] - dt_nominal
+        u_pe[4] - 0.5, u_pe[7] - dt_max
     )
     cost_y_expr_e_pe = cs.vertcat(c_pe, c_dot_pe, theta_dot_pe, x_pe[10])
 
@@ -304,6 +304,14 @@ def create_lipm_ocp(
     con_pe = compute_constraints(x_pe, u_pe, c_next_pe, theta_next_pe, f0_pe, f1_pe, r_dynamic)
 
     model.con_h_expr = cs.vertcat(con_op, con_pe) # 28 equations
+
+    # Terminal constraint to ensure that CoM is on top of support line
+    # (c_x - p0_x)*(p1_y - p0_y) - (c_y - p0_y)*(p1_x - p0_x) == 0
+    com_supp_line_op = (x_op[0] - x_op[6]) * (x_op[9] - x_op[7]) - (x_op[1] - x_op[7]) * (x_op[8] - x_op[6])
+    com_supp_line_pe = (x_pe[0] - x_pe[6]) * (x_pe[9] - x_pe[7]) - (x_pe[1] - x_pe[7]) * (x_pe[8] - x_pe[6])
+
+    model.con_h_expr_e = cs.vertcat(com_supp_line_op, com_supp_line_pe)
+
     
     # Decouple separating planes: Only the physical 8 controls are forced equal at node 0
     u_diff = u_op[0:8] - u_pe[0:8] # 8 equations
@@ -315,6 +323,10 @@ def create_lipm_ocp(
     
     uh = uh_robot + uh_obs + uh_vel
     ocp.constraints.uh = np.array(uh + uh)
+
+    # Terminal limits
+    ocp.constraints.lh_e = np.array([-1e-2, -1e-2])
+    ocp.constraints.uh_e = np.array([1e-2, 1e-2])
 
     # Initial constraints (36 equations: 8 for u_diff == 0 + 28)
     ocp.constraints.lh_0 = np.array([0.0]*8 + lh + lh)
@@ -344,7 +356,7 @@ def create_lipm_ocp(
 
     # Soft constraints on non linear constraints
     # Z: quadratic penalty - z: linear penalty
-    # [4x Kinematic] + [7x Collision] + [2x velocities]
+    # [4x Kinematic] + [6x Collision] + [2x velocities]
     Zu_sh_branch = [1e4]*4 + [1e6]*6 + [1e3]*2
     zu_sh_branch = [1e3]*4 + [1e5]*6 + [1e2]*2
     Zl_sh_branch = [0.0]*4 + [0.0]*6 + [1e3]*2
@@ -375,6 +387,8 @@ def create_lipm_ocp(
     ocp.cost.zu_0 = np.array(zu_sh_branch + zu_sh_branch)
     ocp.cost.Zl_0 = np.array(Zl_sh_branch + Zl_sh_branch)
     ocp.cost.zl_0 = np.array(zl_sh_branch + zl_sh_branch)
+
+
 
     # Constraint on Controls
     ocp.constraints.lbu = np.array(bnd_u_min + bnd_u_min)

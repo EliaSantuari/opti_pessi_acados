@@ -81,7 +81,7 @@ def main():
 
 
     # Push simulation
-    PUSH = 1
+    PUSH = 0
     push_step = 50
 
 

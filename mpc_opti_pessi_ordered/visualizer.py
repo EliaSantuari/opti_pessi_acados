@@ -346,7 +346,6 @@ def plot_simulation_results(history_X, history_U, history_obs, foot_positions_wo
     dt_ref = (dt_max_ms+dt_min_ms)/2
     axs_u[3].axhline(y=dt_min_ms, color='k', linestyle=':', linewidth=2, label=f'Min ({dt_min_ms})')
     axs_u[3].axhline(y=dt_max_ms, color='k', linestyle=':', linewidth=2, label=f'Max ({dt_max_ms})')
-    axs_u[3].axhline(y=dt_ref, color='orange', linestyle='--', alpha=0.7, label=f'Nominal ({dt_ref})')
     axs_u[3].set_title('Control: variable time step (optimal time step)')
     axs_u[3].set_ylabel('Time [ms]')
     axs_u[3].set_xlabel('Simulation time')
