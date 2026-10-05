@@ -161,6 +161,12 @@ def main():
         #     X_sim[4] += delta_vy
         #     print(f"Applied force. Delta Vx: {delta_vx:.3f} m/s, Delta Vy: {delta_vy:.3f} m/s")
 
+        X_sim[10] = 0.0
+        X_aug = np.concatenate([X_sim, X_sim])
+        # Set initial state
+        solver.set(0, "lbx", X_aug)
+        solver.set(0, "ubx", X_aug)
+        solver.set(0, "x", X_aug)
 
         # ---- Gait and hips managing ----
         # Compute the current phase of the gait from step
@@ -177,12 +183,6 @@ def main():
                 X_sim[8:10] = new_hips[2:4]
             previous_phase = current_phase
 
-        X_sim[10] = 0.0
-        X_aug = np.concatenate([X_sim, X_sim])
-        # Set initial state
-        solver.set(0, "lbx", X_aug)
-        solver.set(0, "ubx", X_aug)
-        solver.set(0, "x", X_aug)
 
 
         # ---- Update references and parameters over horizon
@@ -195,43 +195,37 @@ def main():
         yref_e[6:8] = sim_cfg.c_target
 
         # Estimate of the dt
-        dt_guess = (limits.dt_min + limits.dt_max) / (2*sim_cfg.steps_per_phase)
-    
+
+        obs_pos = get_obs_position(t_global, obs_cfg, X_sim[0:2], t_current=t_global)
 
         # Pass the parameters of the hips in the current phase
         for k in range(sim_cfg.N_horizon):
             offset0 = gait_planner.hip_offsets[current_gait[0]]
             offset1 = gait_planner.hip_offsets[current_gait[1]]
 
-            # Prevision -> compute where the obstacle will be in the next step t_k
-            t_k = t_global + k * dt_guess
-            ################ CHEAT!!!! ################
-            obs_pos_k = get_obs_position(t_k, obs_cfg, X_sim[0:2], t_current=t_global)
-
-            # Virtual paraurti
-            virtual_r_obs = obs_cfg.r_obs * 1.8
+            r_dyn = obs_cfg.r_obs + 0.1
 
             # Parameters: [hip0_x, hip0_y, hip1_x, hip1_y, obs_x, obs_y, obs_cfg.r_obs]
-            p_val = np.hstack([offset0, offset1, obs_pos_k, virtual_r_obs, obs_cfg.y_dot_max])
+            p_val = np.hstack([offset0, offset1, obs_pos, r_dyn, obs_cfg.y_dot_max])
 
             solver.set(k, 'p', p_val)
             solver.set(k, 'yref', yref) # Update the intermediate target
 
             # Initialization of the line (WARM START) (line pointing towards the obstacle)
-            dir_to_obs = obs_pos_k - X_sim[0:2]
+            dir_to_obs = obs_pos - X_sim[0:2]
             dist_to_obs = np.linalg.norm(dir_to_obs) + 1e-5
             # Normal points towards the obstacle
             a_guess = dir_to_obs / dist_to_obs
             # b_guess place a line exactly in between the robot and the obstacle
-            b_guess = -np.dot(a_guess, (X_sim[0:2] + obs_pos_k) / 2.0)
+            b_guess = -np.dot(a_guess, (X_sim[0:2] + obs_pos) / 2.0)
 
 
             # u_guess uses the ACTUAL position of the feet (X[6:10]) as guess fot eh future
             u_guess_11 = np.array([
                 X_sim[6], X_sim[7], X_sim[8], X_sim[9],  # p0_next, p1_next 
                 0.5,                     # alpha
-                0.0, 0.0,                # f_diff
-                limits.dt_max,                  # dt_var
+                0.0, 0.0,                # beta, gamma
+                limits.dt_max,           # dt_var
                 a_guess[0], a_guess[1],  # ax, ay
                 b_guess                  # b 
             ])
@@ -242,7 +236,23 @@ def main():
         solver.set(sim_cfg.N_horizon, 'yref', yref_e)
             
         # ---- Solve the OCP ----
-        solver.solve()
+        status = solver.solve()
+        u_candidate = solver.get(0, "u")
+        x_candidate = solver.get(1, "x")
+
+        candidate_ok = (
+            status == 0
+            and np.all(np.isfinite(u_candidate))
+            and np.all(np.isfinite(x_candidate))
+        )
+
+        if not candidate_ok:
+            print("Strategia Fallback!")
+            # Per accettare un comando, controlla anche:
+            # - violazione delle uguaglianze tra i primi otto controlli delle due branche;
+            # - difetti della dinamica e violazioni dei vincoli duri;
+            # - slack relativi alle collisioni;
+            # - distanza geometrica effettiva dall’ostacolo, con la tolleranza scelta.
 
         # Computation time
         solve_time = solver.get_stats('time_tot')
