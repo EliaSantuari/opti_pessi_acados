@@ -38,6 +38,16 @@ def main():
 
     X_aug = np.concatenate([X_sim, X_sim])
 
+    # Initialization lists for warm start
+    X_sol_t_prec = [X_aug for _ in range(sim_cfg.N_horizon + 1)]
+
+    u_init = np.zeros(22)
+    dt_nominal = limits.dt_max
+    u_init[7] = dt_nominal
+    u_init[18] = dt_nominal
+    U_sol_t_prec = [u_init for _ in range(sim_cfg.N_horizon)]
+
+
     # ---- Create the OCP ----
     solver = create_lipm_ocp(
         N=sim_cfg.N_horizon, 
@@ -60,12 +70,22 @@ def main():
 
     foot_positions_world = {'FL': [], 'FR': [], 'RL': [], 'RR': []}
 
-    
-    previous_phase = -1
     t_global = 0.0
 
     # Target reached flag
     reached_target_flag = 0
+
+
+    # ---- Update references and parameters over horizon
+    yref = np.zeros(34)
+    yref[0:2] = sim_cfg.c_target
+    yref[17:19] = sim_cfg.c_target
+    # 
+    yref_e = np.zeros(12)
+    yref_e[0:2] = sim_cfg.c_target
+    yref_e[6:8] = sim_cfg.c_target
+
+
 
 
     print("--- Starting Simulation MPC ---")
@@ -129,86 +149,153 @@ def main():
                 ])
         history_obs.append(obs_pos.copy())
 
-        # if step == push_step and PUSH:
-        #     # Parametri fisici della spinta
-        #     F_push_x = -100.0  # Spinta di 100 Newton (circa 10 kg) all'indietro
-        #     F_push_y = -50.0     # Nessuna spinta laterale
-        #     dt_push = 0.1      # Durata stimata dell'impatto (100 millisecondi)
-        #     # Calcolo della variazione di velocità basata sulla massa
-        #     delta_vx = (F_push_x * dt_push) / robot_cfg.m
-        #     delta_vy = (F_push_y * dt_push) / robot_cfg.m
-        #     # Applica l'impulso
-        #     X_sim[3] += delta_vx
-        #     X_sim[4] += delta_vy
-        #     print(f"Applied force. Delta Vx: {delta_vx:.3f} m/s, Delta Vy: {delta_vy:.3f} m/s")
 
-        X_sim[10] = 0.0
+
+
+        # Get the current gait 
+        current_gait = gait_planner.get_gait_horizon(step, sim_cfg.N_horizon)[0]
+
+        # Set to zero the time for this loop
+        X_sim[10] = 0.0 # Used only for propagation of uncertainty of obstacle in pessimistic branch
         X_aug = np.concatenate([X_sim, X_sim])
+        # X_aug[21] = 0.0
+        
         # Set initial state
         solver.set(0, "lbx", X_aug)
         solver.set(0, "ubx", X_aug)
 
-        # ---- Gait and hips managing ----
-        # Compute the current phase of the gait from step
-        current_phase = (step // gait_planner.steps_per_phase) % 2
-        # Get the gait horizon and then the current gait 
-        current_gait = gait_planner.get_gait_horizon(step, sim_cfg.N_horizon)[0]
 
-        # When the phase changes I need to set the hips on the selected ones
-        if current_phase != previous_phase:
-            # The first step will not enter here
-            if previous_phase != -1: 
-                new_hips = gait_planner.compute_hip_positions(X_sim[0:3], current_gait)
-                X_sim[6:8] = new_hips[0:2]
-                X_sim[8:10] = new_hips[2:4]
-            previous_phase = current_phase
+        ### Set the parameters
+        # Get the horizon of the gait
+        gait_horizon = gait_planner.get_gait_horizon(step, sim_cfg.N_horizon)
 
-
-        # ---- Update references and parameters over horizon
-        yref = np.zeros(34)
-        yref[0:2] = sim_cfg.c_target
-        yref[17:19] = sim_cfg.c_target
-        
-        yref_e = np.zeros(12)
-        yref_e[0:2] = sim_cfg.c_target
-        yref_e[6:8] = sim_cfg.c_target
+        for k in range(sim_cfg.N_horizon+1):
+            gait_k = gait_horizon[k]
+            offset_0 = gait_planner.hip_offsets[gait_k[0]]
+            offset_1 = gait_planner.hip_offsets[gait_k[1]]
+            r_dyn = obs_cfg.r_obs + 0.1
+            
+            # Set params
+            p_val = np.hstack([offset_0, offset_1, obs_pos, r_dyn, obs_cfg.y_dot_max])
+            solver.set(k, "p", p_val)                    
 
 
-        # Pass the parameters of the hips in the current phase
+        ### I need to warm up the controller and the state
         for k in range(sim_cfg.N_horizon):
-            offset0 = gait_planner.hip_offsets[current_gait[0]]
-            offset1 = gait_planner.hip_offsets[current_gait[1]]
+            gait_k = gait_horizon[k]
 
-            # Parameters: [hip0_x, hip0_y, hip1_x, hip1_y, obs_x, obs_y, obs_cfg.r_obs]
-            p_val = np.hstack([offset0, offset1, obs_pos, obs_cfg.r_obs, obs_cfg.y_dot_max])
+            # Indeces for shifts: last step repeat last value
+            idx_shift_u = k + 1 if k < (sim_cfg.N_horizon-1) else k
+            idx_shift_x = k + 1
 
-            solver.set(k, 'p', p_val)
-            solver.set(k, 'yref', yref) # Update the intermediate target
+            x_prev = X_sol_t_prec[idx_shift_x]
+            u_prev = U_sol_t_prec[idx_shift_u]
 
-            # Initialization of the line (WARM START) (line pointing towards the obstacle)
-            dir_to_obs = obs_pos - X_sim[0:2]
-            dist_to_obs = np.linalg.norm(dir_to_obs) + 1e-5
-            # Normal points towards the obstacle
-            a_guess = dir_to_obs / dist_to_obs
-            # b_guess place a line exactly in between the robot and the obstacle
-            b_guess = -np.dot(a_guess, (X_sim[0:2] + obs_pos) / 2.0)
+            # Optimistic
+            com_guess_op = x_prev[0:2]
+            theta_guess_op = x_prev[2]
+            vel_guess_op = x_prev[3:5]
+            vel_ang_guess_op = x_prev[5]
 
+            # Pessimistic
+            com_guess_pe = x_prev[11:13]
+            theta_guess_pe = x_prev[13]
+            vel_guess_pe = x_prev[14:16]
+            vel_ang_guess_pe = x_prev[16]
 
-            # u_guess uses the ACTUAL position of the feet (X[6:10]) as guess fot eh future
-            u_guess_11 = np.array([
-                X_sim[6], X_sim[7], X_sim[8], X_sim[9],  # p0_next, p1_next 
-                0.5,                     # alpha
-                0.0, 0.0,                # f_diff
-                limits.dt_max,                  # dt_var
-                a_guess[0], a_guess[1],  # ax, ay
-                b_guess                  # b 
+            # Guess of the hips position
+            hips_guess_op = gait_planner.compute_hip_positions([com_guess_op[0], com_guess_op[1], theta_guess_op], gait_k)
+            hip0_guess_op = hips_guess_op[0:2]
+            hip1_guess_op = hips_guess_op[2:4]
+
+            hips_guess_pe = gait_planner.compute_hip_positions([com_guess_pe[0], com_guess_pe[1], theta_guess_pe], gait_k)
+            hip0_guess_pe = hips_guess_pe[0:2]
+            hip1_guess_pe = hips_guess_pe[2:4]
+
+            # Distances of com and hips from obs
+            dist_com_op = np.linalg.norm(obs_pos - com_guess_op)
+            dist_hip0_op = np.linalg.norm(obs_pos - hip0_guess_op)
+            dist_hip1_op = np.linalg.norm(obs_pos - hip1_guess_op)
+
+            dist_com_pe = np.linalg.norm(obs_pos - com_guess_pe)
+            dist_hip0_pe = np.linalg.norm(obs_pos - hip0_guess_pe)
+            dist_hip1_pe = np.linalg.norm(obs_pos - hip1_guess_pe)
+
+            # Who is the closest?
+            min_dist_op = min(dist_com_op, dist_hip0_op, dist_hip1_op)
+            min_dist_pe = min(dist_com_pe, dist_hip0_pe, dist_hip1_pe)
+
+            # Take the closer point
+            if min_dist_op == dist_hip0_op:
+                closest_pt_op = hip0_guess_op
+            elif min_dist_op == dist_hip1_op:
+                closest_pt_op = hip1_guess_op
+            else:
+                closest_pt_op = com_guess_op
+
+            if min_dist_pe == dist_hip0_pe:
+                closest_pt_pe = hip0_guess_pe
+            elif min_dist_pe == dist_hip1_pe:
+                closest_pt_pe = hip1_guess_pe
+            else:
+                closest_pt_pe = com_guess_pe
+
+            # Compute the semiplanes
+            dir_to_obs_op = obs_pos - closest_pt_op
+            dist_to_obs_op = np.linalg.norm(dir_to_obs_op) + 1e-5
+            a_guess_op = dir_to_obs_op / dist_to_obs_op
+            b_guess_op = -np.dot(a_guess_op, (closest_pt_op + obs_pos) / 2.0)
+
+            dir_to_obs_pe = obs_pos - closest_pt_pe
+            dist_to_obs_pe = np.linalg.norm(dir_to_obs_pe) + 1e-5
+            a_guess_pe = dir_to_obs_pe / dist_to_obs_pe
+            b_guess_pe = -np.dot(a_guess_pe, (closest_pt_pe + obs_pos) / 2.0)
+
+            # Construction of U_guess
+            u_guess_op = np.array([
+                hips_guess_op[0], hips_guess_op[1], hips_guess_op[2], hips_guess_op[3],
+                0.5,                            # alpha
+                0.0, 0.0,                       # beta, gamma
+                u_prev[7],           # time
+                a_guess_op[0], a_guess_op[1],
+                b_guess_op
             ])
-            solver.set(k, 'u', np.concatenate([u_guess_11, u_guess_11]))
+            u_guess_pe = np.array([
+                hips_guess_pe[0], hips_guess_pe[1], hips_guess_pe[2], hips_guess_pe[3],
+                0.5,                            # alpha
+                0.0, 0.0,                       # beta, gamma
+                u_prev[18],           # time
+                a_guess_pe[0], a_guess_pe[1],
+                b_guess_pe
+            ])
+            # First steps must be the same! We could use the pessimistic to be more conservative
+            if k == 0:
+                u_guess_op = u_guess_pe
 
+            solver.set(k, 'u', np.concatenate([u_guess_op, u_guess_pe]))
 
-        # Set the parameter of the final step because is missing
-        solver.set(sim_cfg.N_horizon, 'p', p_val)
-        solver.set(sim_cfg.N_horizon, 'yref', yref_e)
+            # Construction of X_guess
+            if k > 0:
+                x_guess_op = np.zeros(11)
+                x_guess_op[0:2] = com_guess_op
+                x_guess_op[2] = theta_guess_op
+                x_guess_op[3:5] = vel_guess_op
+                x_guess_op[5] = vel_ang_guess_op
+                x_guess_op[6:10] = x_prev[6:10]
+                x_guess_op[10] = u_prev[7]
+
+                x_guess_pe = np.zeros(11)
+                x_guess_pe[0:2] = com_guess_pe
+                x_guess_pe[2] = theta_guess_pe
+                x_guess_pe[3:5] = vel_guess_pe
+                x_guess_pe[5] = vel_ang_guess_pe
+                x_guess_pe[6:10] = x_prev[17:21]
+                x_guess_pe[10] = u_prev[18]
+
+                solver.set(k, 'x', np.concatenate([x_guess_op, x_guess_pe]))
+        solver.set(sim_cfg.N_horizon, 'x', np.concatenate([x_guess_op, x_guess_pe]))
+
+        
             
         # ---- Solve the OCP ----
         solver.solve()
@@ -222,11 +309,19 @@ def main():
         u_opt_22 = solver.get(0, 'u')
         X_next_22 = solver.get(1, 'x')
 
-        # Extract only optimistic part
-        u_apply = u_opt_22[0:11]
-        X_next_sim = X_next_22[0:11]
+        X_sol_t_prec = []
+        U_sol_t_prec = []
+        for k in range(sim_cfg.N_horizon):
+            X_sol_t_prec.append(solver.get(k, 'x'))
+            U_sol_t_prec.append(solver.get(k, 'u'))
+        X_sol_t_prec.append(solver.get(sim_cfg.N_horizon, 'x'))
 
-        # ---- Logging -----
+
+        u_apply = u_opt_22[0:11]
+        X_next_sim = X_next_22[11:22]
+
+
+        #### Logging ####
         # Save dt_var
         dt_chosen = u_apply[7]
         t_global += dt_chosen
@@ -236,9 +331,7 @@ def main():
             foot_positions_world[current_gait[0]].append(u_apply[0:2])
             foot_positions_world[current_gait[1]].append(u_apply[2:4])
 
-        # Compute kinematic distances between foot and hip
-        # p0_curr, p1_curr = X_sim[6:8], X_sim[8:10]
-        # p0_next, p1_next = u_apply[0:2], u_apply[2:4]
+
         
         
         # Future (X_next) position scheduled by the controller

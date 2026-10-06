@@ -18,12 +18,16 @@ class GaitPlanner:
 
     def get_gait_horizon(self, step_index: int, N: int):
         """
-        Returns the same couple for the whole horizon, in this way avoids the solver to move the right foot underneath the prediction of the left shoulder
+        Returns the sequence of the support feet along the horizon
         inputs: step_index (int), N (int)
-        outputs: ['FR', 'RL', 'FR', 'RL', 'FR', 'RL',...] (N+1) times in base on the selected phase, if even phase is 0 otherwise it is 1
+        outputs: ['FR', 'RL', 'FL', 'RR', 'FR', 'RL',...] (N+1) times in base on the selected phase, if even phase is 0 otherwise it is 1
         """
-        phase = (step_index // self.steps_per_phase) % 2
-        return [self.trot_pairs[phase]] * (N + 1)
+        horizon_pairs = []
+        for k in range(N+1):
+            future_step = step_index + k
+            future_phase = (future_step // self.steps_per_phase) % 2
+            horizon_pairs.append(self.trot_pairs[future_phase])
+        return horizon_pairs
 
     def compute_hip_positions(self, c_state: np.ndarray, gait_pair: list):
         """
