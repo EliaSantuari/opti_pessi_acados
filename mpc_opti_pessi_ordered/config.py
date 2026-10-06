@@ -15,13 +15,13 @@ class RobotConfig:
     mu: float = 0.6 
     max_ext_sq: float = 0.1 # Leg extension limit squared
     # Initial state
-    x_init: np.ndarray = np.array([-1.5, -0.5])
+    x_init: np.ndarray = np.array([-0.8, -0.5])
     theta_init: float = np.deg2rad(0)
 
 
 @dataclass
 class Limits:
-    dt_min: float = 0.1     # / steps_per_phase 
+    dt_min: float = 0.05     # / steps_per_phase 
     dt_max: float = 0.25   # / steps_per_phase 
     theta_dot: float = 0.6 # 0.8  
     v_max_x: float = 1.0 # 0.6
@@ -49,7 +49,7 @@ class MPCWeights:
 
 @dataclass
 class SimulationConfig:
-    N_horizon: int = 7
+    N_horizon: int = 8
     sim_steps: int = 400
     steps_per_phase: int = 1
     c_target: np.ndarray = np.array([1.0, 0.2])
@@ -62,13 +62,13 @@ class SimulationConfig:
 @dataclass
 class ObstacleConfig:
     # General
-    pos_init: np.ndarray = np.array([0.1, 1.0])
+    pos_init: np.ndarray = np.array([1.1, 1.0])
     r_obs: float = 0.2
     speed: float = 0.4
-    y_dot_max: float = 0.4
+    y_dot_max: float = 0.5
     obs_type: str = "dynamic" # "static", "dynamic", "adversarial", "circular"
     # Dynamic
-    top_pos_dyn: np.ndarray = np.array([0.1, 1.0])
+    top_pos_dyn: np.ndarray = np.array([0.1, 0.5])
     bot_pos_dyn: np.ndarray = np.array([0.1, -1.0])
     # Circular
     center: np.ndarray = np.array([1.0, 0.2])

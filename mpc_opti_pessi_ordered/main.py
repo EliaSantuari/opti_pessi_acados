@@ -127,8 +127,12 @@ def main():
     previous_phase = -1
     t_global = 0.0
 
+    # Last planned feet
+    last_planned_feet = None
+
     # Target reached flag
     reached_target_flag = 0
+
 
 
     print("--- Starting Simulation MPC ---")
@@ -161,12 +165,6 @@ def main():
         #     X_sim[4] += delta_vy
         #     print(f"Applied force. Delta Vx: {delta_vx:.3f} m/s, Delta Vy: {delta_vy:.3f} m/s")
 
-        X_sim[10] = 0.0
-        X_aug = np.concatenate([X_sim, X_sim])
-        # Set initial state
-        solver.set(0, "lbx", X_aug)
-        solver.set(0, "ubx", X_aug)
-        solver.set(0, "x", X_aug)
 
         # ---- Gait and hips managing ----
         # Compute the current phase of the gait from step
@@ -177,15 +175,20 @@ def main():
         # When the phase changes I need to set the hips on the selected ones
         if current_phase != previous_phase:
             # The first step will not enter here
-            if previous_phase != -1: 
-                new_hips = gait_planner.compute_hip_positions(X_sim[0:3], current_gait)
-                X_sim[6:8] = new_hips[0:2]
-                X_sim[8:10] = new_hips[2:4]
+            if previous_phase != -1 and last_planned_feet is not None: 
+                X_sim[6:8] = last_planned_feet[0:2]
+                X_sim[8:10] = last_planned_feet[2:4]
             previous_phase = current_phase
 
+        X_sim[10] = 0.0
+        X_aug = np.concatenate([X_sim, X_sim])
+        # Set initial state
+        solver.set(0, "lbx", X_aug)
+        solver.set(0, "ubx", X_aug)
+        solver.set(0, "x", X_aug)
 
 
-        # ---- Update references and parameters over horizon
+        # ---- Update references and parameters over horizon ----
         yref = np.zeros(34)
         yref[0:2] = sim_cfg.c_target
         yref[17:19] = sim_cfg.c_target
@@ -194,46 +197,92 @@ def main():
         yref_e[0:2] = sim_cfg.c_target
         yref_e[6:8] = sim_cfg.c_target
 
-        # Estimate of the dt
+        # 1) Extract the horizon of the phases 
+        gait_horizon = gait_planner.get_gait_horizon(step, sim_cfg.N_horizon)
+        
+        # Variables to propagate the guess in the future (Kinematic rollout)
+        dt_guess = limits.dt_max  # Only for the first step, then use u_apply[7]
+        com_guess = X_sim[0:2].copy()
+        theta_guess = X_sim[2]
+        vel_guess = X_sim[3:5].copy()
 
-        obs_pos = get_obs_position(t_global, obs_cfg, X_sim[0:2], t_current=t_global)
-
-        # Pass the parameters of the hips in the current phase
+        #### WARM START ####
         for k in range(sim_cfg.N_horizon):
-            offset0 = gait_planner.hip_offsets[current_gait[0]]
-            offset1 = gait_planner.hip_offsets[current_gait[1]]
+            gait_k = gait_horizon[k]
+            offset0 = gait_planner.hip_offsets[gait_k[0]]
+            offset1 = gait_planner.hip_offsets[gait_k[1]]
 
+            # Al k=0 usiamo lo stato attuale. Dal k=1 in poi lo facciamo avanzare.
+            # 2) Propagate the kinematic of the CoM, the initial step is the actual state, from k=1 we propagate.
+            # For the first step we assume dt_guess, after that we take the dt_chosen of the prev steps
+            if k > 0:
+                if step == 0:
+                    com_guess = com_guess + vel_guess * dt_guess
+                else:
+                    com_guess = com_guess + vel_guess * dt_chosen
+                
+            # 3) Guess the position of the feet at node k
+            # We can use the hips projected on the ground based on the CoM guess and active feet
+            hips_guess = gait_planner.compute_hip_positions([com_guess[0], com_guess[1], theta_guess], gait_k)
+
+            # 4) Position of the obstacle - assuming it constant through the horizon because the two branches manage it differently
+            obs_pos_k = obs_pos_current
             r_dyn = obs_cfg.r_obs + 0.1
 
-            # Parameters: [hip0_x, hip0_y, hip1_x, hip1_y, obs_x, obs_y, obs_cfg.r_obs]
-            p_val = np.hstack([offset0, offset1, obs_pos, r_dyn, obs_cfg.y_dot_max])
+            # Parameters: [hip0_x, hip0_y, hip1_x, hip1_y, obs_x, obs_y, obs_r, y_dot_max]
+            p_val = np.hstack([offset0, offset1, obs_pos_k, r_dyn, obs_cfg.y_dot_max])
 
             solver.set(k, 'p', p_val)
-            solver.set(k, 'yref', yref) # Update the intermediate target
+            solver.set(k, 'yref', yref)
 
-            # Initialization of the line (WARM START) (line pointing towards the obstacle)
-            dir_to_obs = obs_pos - X_sim[0:2]
+            # 5) Update the hyperplane with the future closest point to the obstacle
+            hip0_guess = hips_guess[0:2]
+            hip1_guess = hips_guess[2:4]
+
+            dist_com = np.linalg.norm(obs_pos_k - com_guess)
+            dist_hip0 = np.linalg.norm(obs_pos_k - hip0_guess)
+            dist_hip1 = np.linalg.norm(obs_pos_k - hip1_guess)
+
+            min_dist = min(dist_com, dist_hip0, dist_hip1)
+            if min_dist == dist_hip0:
+                closest_pt = hip0_guess
+            elif min_dist == dist_hip1:
+                closest_pt = hip1_guess
+            else:
+                closest_pt = com_guess
+
+            dir_to_obs = obs_pos_k - closest_pt
             dist_to_obs = np.linalg.norm(dir_to_obs) + 1e-5
-            # Normal points towards the obstacle
             a_guess = dir_to_obs / dist_to_obs
-            # b_guess place a line exactly in between the robot and the obstacle
-            b_guess = -np.dot(a_guess, (X_sim[0:2] + obs_pos) / 2.0)
+            b_guess = -np.dot(a_guess, (closest_pt + obs_pos_k) / 2.0)
 
-
-            # u_guess uses the ACTUAL position of the feet (X[6:10]) as guess fot eh future
+            # u_guess construction
             u_guess_11 = np.array([
-                X_sim[6], X_sim[7], X_sim[8], X_sim[9],  # p0_next, p1_next 
+                hips_guess[0], hips_guess[1], hips_guess[2], hips_guess[3], # future feet position coherent with phase k
                 0.5,                     # alpha
                 0.0, 0.0,                # beta, gamma
-                limits.dt_max,           # dt_var
+                dt_guess,                # dt_var
                 a_guess[0], a_guess[1],  # ax, ay
                 b_guess                  # b 
             ])
             solver.set(k, 'u', np.concatenate([u_guess_11, u_guess_11]))
-
-        # Set the parameter of the final step because is missing
+            
+            # --- Costruzione di X GUESS (Fondamentale!) ---
+            if k > 0:
+                x_guess_11 = np.zeros(11)
+                x_guess_11[0:2] = com_guess
+                x_guess_11[2] = theta_guess
+                x_guess_11[3:5] = vel_guess
+                x_guess_11[6:10] = hips_guess # Posizione piedi = proiezione delle anche
+                x_guess_11[10] = dt_guess # O eventuale guess sul tempo locale del passo
+                
+                x_aug_guess = np.concatenate([x_guess_11, x_guess_11])
+                solver.set(k, 'x', x_aug_guess)
+        # Nodo finale N
         solver.set(sim_cfg.N_horizon, 'p', p_val)
         solver.set(sim_cfg.N_horizon, 'yref', yref_e)
+        # Imposta lo stato guess anche per il nodo terminale
+        solver.set(sim_cfg.N_horizon, 'x', x_aug_guess)
             
         # ---- Solve the OCP ----
         status = solver.solve()
@@ -264,8 +313,10 @@ def main():
 
         # Extract only optimistic part
         u_apply = u_opt_22[0:11]
-        # X_next_sim = X_next_22[0:11]
         X_next_sim = solver.get(1, "x")[0:11]
+
+        # For the future position of the feet
+        last_planned_feet = u_apply[0:4].copy()
 
         # ---- Logging -----
         # Save dt_var
@@ -286,9 +337,6 @@ def main():
             foot_positions_world[current_gait[0]].append(u_apply[0:2])
             foot_positions_world[current_gait[1]].append(u_apply[2:4])
 
-        # Compute kinematic distances between foot and hip
-        # p0_curr, p1_curr = X_sim[6:8], X_sim[8:10]
-        # p0_next, p1_next = u_apply[0:2], u_apply[2:4]
         
         
         # Future (X_next) position scheduled by the controller
@@ -318,6 +366,7 @@ def main():
 
         # For the future step - in the real implementation here we will have the sensors data
         X_sim = X_next_sim
+        
 
     print(f"Average computational time: {np.mean(time_hist)*1000:.2f} ms")
 
