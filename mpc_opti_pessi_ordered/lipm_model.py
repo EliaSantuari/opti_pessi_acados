@@ -399,8 +399,15 @@ def create_lipm_ocp(
     ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM'
     ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
     ocp.solver_options.integrator_type = 'DISCRETE'
-    ocp.solver_options.nlp_solver_type = sim_conf.solver_type 
-    if sim_conf.max_iter != None:
-        ocp.solver_options.nlp_solver_max_iter = sim_conf.max_iter
+    ocp.solver_options.nlp_solver_type = "SQP"
+    ocp.solver_options.nlp_solver_max_iter = 5
+    ocp.solver_options.qp_solver_iter_max = 100
+    ocp.solver_options.qp_solver_warm_start = 1
+    ocp.solver_options.globalization = 'MERIT_BACKTRACKING'
+    # regolarization for the hessian diagonal elements
+    ocp.solver_options.levenberg_marquardt = 1e-2
+    ocp.solver_options.qp_solver_tol_stat = 1e-4
+    ocp.solver_options.qp_solver_tol_eq = 1e-4
+    ocp.solver_options.qp_solver_tol_ineq = 1e-4
 
     return AcadosOcpSolver(ocp)

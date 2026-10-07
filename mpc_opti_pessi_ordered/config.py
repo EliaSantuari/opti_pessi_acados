@@ -65,7 +65,7 @@ class ObstacleConfig:
     pos_init: np.ndarray = np.array([0.5, 0.5]) #np.array([0.1, 1.0])
     r_obs: float = 0.2
     speed: float = 0.45
-    y_dot_max: float = 0.45
+    y_dot_max: float = 1
     obs_type: str = "dynamic" # "static", "dynamic", "adversarial", "circular"
     # Dynamic
     top_pos_dyn: np.ndarray = np.array([0.1, 0.5])
