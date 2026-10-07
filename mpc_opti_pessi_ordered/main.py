@@ -323,13 +323,17 @@ def main():
                 x_guess_pe[10] = u_prev[18]
 
                 solver.set(k, 'x', np.concatenate([x_guess_op, x_guess_pe]))
+
         solver.set(sim_cfg.N_horizon, 'x', np.concatenate([x_guess_op, x_guess_pe]))
 
         
             
         # ---- Solve the OCP ----
-        solver.solve()
-        
+        status = solver.solve()
+
+        # if status != 0:
+            # solver.print_statistics()
+        #     # solver.qp_diagnostics()
 
         # Computation time
         solve_time = solver.get_stats('time_tot')

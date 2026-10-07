@@ -322,19 +322,19 @@ def plot_simulation_results(history_X, history_U, history_obs, foot_positions_wo
     axs_u[0].legend(loc='upper right')
     axs_u[0].grid(True)
     
-    # f_diff_x
-    axs_u[1].plot(traj_u[:, 5], 'b-', linewidth=2, label=r'$\Delta f_x$')
+    # beta
+    axs_u[1].plot(traj_u[:, 5], 'b-', linewidth=2, label=r'$\beta$')
     axs_u[1].axhline(y=0.0, color='gray', linestyle='--', alpha=0.7)
-    axs_u[1].set_title('Control: longitudinal differential force')
-    axs_u[1].set_ylabel('Force [N]')
+    axs_u[1].set_title('Control: balancing of the weight beta')
+    axs_u[1].set_ylabel('Beta')
     axs_u[1].legend(loc='upper right')
     axs_u[1].grid(True)
     
-    # f_diff_y
-    axs_u[2].plot(traj_u[:, 6], 'g-', linewidth=2, label=r'$\Delta f_y$')
+    # gamma
+    axs_u[2].plot(traj_u[:, 6], 'g-', linewidth=2, label=r'$\gamma$')
     axs_u[2].axhline(y=0.0, color='gray', linestyle='--', alpha=0.7)
-    axs_u[2].set_title('Control: tangential differential force')
-    axs_u[2].set_ylabel('Force [N]')
+    axs_u[2].set_title('Control: balancing of the weight gamma')
+    axs_u[2].set_ylabel('Gamma')
     axs_u[2].legend(loc='upper right')
     axs_u[2].grid(True)
     
@@ -498,7 +498,7 @@ def plot_simulation_results(history_X, history_U, history_obs, foot_positions_wo
     history_obs=history_obs,
     obs_r=obs_r,
     interval=100,
-    tail_frames=40
+    tail_frames=10
 )
 
 

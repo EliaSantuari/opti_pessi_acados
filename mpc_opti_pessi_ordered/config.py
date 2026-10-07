@@ -20,8 +20,8 @@ class RobotConfig:
 
 @dataclass
 class Limits:
-    dt_min: float = 0.01     # / steps_per_phase 
-    dt_max: float = 0.1   # / steps_per_phase 
+    dt_min: float = 0.1    
+    dt_max: float = 0.25    
     theta_dot: float = 0.6 # 0.8  
     v_max_x: float = 1.0 # 0.6
     v_max_y: float = 0.45 # 0.3
@@ -39,7 +39,7 @@ class MPCWeights:
     yaw_rate: float = 1             # 5: Yaw rate
     time_weight: float = 1e-6       # 6: Time
     anti_skating: float = 10.0      # 7-10: Anti-Skating
-    posture: float = 300.0          # 11-14: Posture
+    posture: float = 1000.0          # 11-14: Posture
     alpha_weight: float = 1         # 15: Alpha
     f_diff_weight: float = 10       # 16-17: f_diff NOT USED
     dt_weight: float = 1e-3         # 18: dt
@@ -62,9 +62,9 @@ class SimulationConfig:
 @dataclass
 class ObstacleConfig:
     # General
-    pos_init: np.ndarray = np.array([0.5, 0.5]) #np.array([0.1, 1.0])
+    pos_init: np.ndarray = np.array([0.5, 2.0]) #np.array([0.1, 1.0])
     r_obs: float = 0.2
-    speed: float = 0.45
+    speed: float = 1
     y_dot_max: float = 1
     obs_type: str = "dynamic" # "static", "dynamic", "adversarial", "circular"
     # Dynamic
