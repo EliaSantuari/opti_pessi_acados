@@ -13,28 +13,6 @@ from config import RobotConfig, MPCWeights, SimulationConfig, ObstacleConfig, Li
 
 
 
-def clip_control_guess(u, limits, sim_cfg):
-    u = np.asarray(u, dtype=float).copy()
-
-    dt_lo = limits.dt_min / sim_cfg.steps_per_phase
-    dt_hi = limits.dt_max / sim_cfg.steps_per_phase
-
-    u[4] = np.clip(u[4], limits.alpha_min, limits.alpha_max)
-    u[5] = np.clip(u[5], 0.0, 1.0)       # beta
-    u[6] = np.clip(u[6], 0.0, 1.0)       # gamma
-    u[7] = np.clip(u[7], dt_lo, dt_hi)   # dt
-    u[8] = np.clip(u[8], -1.0, 1.0)      # a_x
-    u[9] = np.clip(u[9], -1.0, 1.0)      # a_y
-    u[10] = np.clip(u[10], -100.0, 100.0)  # b
-
-    return u
-
-
-
-
-
-
-
 
 def main():
     # ---- Settings and initialization -----
@@ -330,7 +308,7 @@ def main():
             
         # ---- Solve the OCP ----
         status = solver.solve()
-
+        
         # if status != 0:
             # solver.print_statistics()
         #     # solver.qp_diagnostics()
