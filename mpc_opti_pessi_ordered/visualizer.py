@@ -30,8 +30,7 @@ from matplotlib.collections import LineCollection
 from matplotlib.patches import Circle
 
 
-def animate_robot_feet(history_X, history_obs, obs_r,
-                       interval=80, tail_frames=40):
+def animate_robot_feet(history_X, history_obs, obs_r, pred_op, pred_pe, interval=80, tail_frames=40):
     """
     Anima CoM, impronte/traettorie dei piedi e ostacolo.
 
@@ -47,17 +46,28 @@ def animate_robot_feet(history_X, history_obs, obs_r,
     traj = np.asarray(history_X)
     obs_traj = np.asarray(history_obs)
 
+    pred_op = None if pred_op is None else np.asarray(pred_op)
+    pred_pe = None if pred_pe is None else np.asarray(pred_pe)
+
     if traj.ndim != 2 or traj.shape[1] < 10:
         raise ValueError("history_X deve avere almeno 10 colonne.")
     if obs_traj.ndim != 2 or obs_traj.shape[1] < 2:
         raise ValueError("history_obs deve avere forma (N, 2).")
 
     n = min(len(traj), len(obs_traj))
+    if pred_op is not None:
+        n = min(n, len(pred_op))
+    if pred_pe is not None:
+        n = min(n, len(pred_pe))
     if n == 0:
         raise ValueError("Le storie della simulazione sono vuote.")
 
     traj = traj[:n]
     obs_traj = obs_traj[:n]
+    if pred_op is not None:
+        pred_op = pred_op[:n]
+    if pred_pe is not None:
+        pred_pe = pred_pe[:n]
 
     com = traj[:, 0:2]
     p0 = traj[:, 6:8]
@@ -68,6 +78,14 @@ def animate_robot_feet(history_X, history_obs, obs_r,
     # Limiti del grafico: includono CoM, piedi e ostacolo
     all_x = np.concatenate((com[:, 0], p0[:, 0], p1[:, 0], obs_traj[:, 0]))
     all_y = np.concatenate((com[:, 1], p0[:, 1], p1[:, 1], obs_traj[:, 1]))
+
+    if pred_op is not None:
+        all_x = np.concatenate((all_x, pred_op[:, :, 0].ravel()))
+        all_y = np.concatenate((all_y, pred_op[:, :, 1].ravel()))
+    if pred_pe is not None:
+        all_x = np.concatenate((all_x, pred_pe[:, :, 0].ravel()))
+        all_y = np.concatenate((all_y, pred_pe[:, :, 1].ravel()))
+
     margin = obs_r + 0.3
     ax.set_xlim(all_x.min() - margin, all_x.max() + margin)
     ax.set_ylim(all_y.min() - margin, all_y.max() + margin)
@@ -133,8 +151,25 @@ def animate_robot_feet(history_X, history_obs, obs_r,
             colors.append((*plt.matplotlib.colors.to_rgb(color), alpha))
         return segments, colors
 
+    pred_op_line, = ax.plot(
+        [], [], color="deepskyblue", linestyle="--", marker=".",
+        markersize=5, linewidth=2, label="Horizon ottimistico", zorder=7
+    )
+    pred_pe_line, = ax.plot(
+        [], [], color="darkorange", linestyle="--", marker=".",
+        markersize=5, linewidth=2, label="Horizon pessimistico", zorder=7
+    )
+
+
     def update(frame):
         nonlocal ghost_circles
+
+        if pred_op is not None:
+            pred_op_line.set_data(pred_op[frame, :, 0], pred_op[frame, :, 1])
+
+        if pred_pe is not None:
+            pred_pe_line.set_data(pred_pe[frame, :, 0], pred_pe[frame, :, 1])
+
 
         start = max(0, frame - tail_frames + 1)
 
@@ -209,7 +244,8 @@ def animate_robot_feet(history_X, history_obs, obs_r,
         return (
             com_line, com_dot, leg0_line, leg1_line,
             p0_trail, p1_trail, p0_marks, p1_marks,
-            obs_line, obstacle_now, obstacle_center
+            obs_line, obstacle_now, obstacle_center,
+            pred_op_line, pred_pe_line
         )
 
     ax.legend(loc="best")
@@ -223,7 +259,7 @@ def animate_robot_feet(history_X, history_obs, obs_r,
 
 
 
-def plot_simulation_results(history_X, history_U, history_obs, foot_positions_world, distances, target, obs_params):
+def plot_simulation_results(history_X, history_U, history_obs, foot_positions_world, distances, target, obs_params, history_pred_op, history_pred_pe):
     """Raccoglie e genera tutti i grafici della simulazione con i relativi limiti."""
     traj = np.array(history_X)
     traj_u = np.array(history_U)
@@ -497,6 +533,8 @@ def plot_simulation_results(history_X, history_U, history_obs, foot_positions_wo
     history_X=history_X,
     history_obs=history_obs,
     obs_r=obs_r,
+    pred_op=history_pred_op,
+    pred_pe=history_pred_pe,
     interval=100,
     tail_frames=10
 )

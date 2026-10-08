@@ -3,6 +3,11 @@ import numpy as np
 from acados_template import AcadosOcp, AcadosModel, AcadosOcpSolver
 from config import RobotConfig, MPCWeights, Limits, SimulationConfig
 
+
+# I HAVE AN OCP WITH 44 (11+11+11+11) * N VARIABLES but acados uses multiple shooting, thus it divides the problem into temporal nodes and creates a blocks structure for the matrices.
+# This means having in each node of the horizon (up to the last) an Hessian with dimensions 44x44 and in the last node of 22x22
+# 
+
 def create_lipm_ocp(
         N=8,
         c_target=np.array([0.0, 0.0]),
@@ -85,7 +90,7 @@ def create_lipm_ocp(
     x_pe = cs.SX.sym('x_pe', 11)
     x = cs.vertcat(x_op, x_pe)
     
-    u_op = cs.SX.sym('u_op', 11) # p0next_x, p0next_y, p1next_x, p1next_y, alpha, beta, gamma, dt, ax, ay, b
+    u_op = cs.SX.sym('u_op', 11) # p0next_x, p0next_y, p1next_x, p1next_y, alpha, f_diff_x, f_diff_y, dt, ax, ay, b
     u_pe = cs.SX.sym('u_pe', 11)
     u = cs.vertcat(u_op, u_pe)
     
@@ -302,18 +307,7 @@ def create_lipm_ocp(
     con_pe = compute_constraints(x_pe, u_pe, c_next_pe, theta_next_pe, f0_pe, f1_pe, r_dynamic)
 
     model.con_h_expr = cs.vertcat(con_op, con_pe) # 28 equations
-
-
-    # Terminal constraint to ensure that CoM is on top of support line
-    # (c_x - p0_x)*(p1_y - p0_y) - (c_y - p0_y)*(p1_x - p0_x) == 0
-    com_supp_line_op = (x_op[0] - x_op[6]) * (x_op[9] - x_op[7]) - (x_op[1] - x_op[7]) * (x_op[8] - x_op[6])
-    com_supp_line_pe = (x_pe[0] - x_pe[6]) * (x_pe[9] - x_pe[7]) - (x_pe[1] - x_pe[7]) * (x_pe[8] - x_pe[6])
-
-    model.con_h_expr_e = cs.vertcat(com_supp_line_op, com_supp_line_pe)
-
-
-
-
+    
     # Decouple separating planes: Only the physical 8 controls are forced equal at node 0
     u_diff = u_op[0:8] - u_pe[0:8] # 8 equations
     model.con_h_expr_0 = cs.vertcat(u_diff, con_op, con_pe)
@@ -324,10 +318,6 @@ def create_lipm_ocp(
     
     uh = uh_robot + uh_obs + uh_vel
     ocp.constraints.uh = np.array(uh + uh)
-
-    # Terminal limits
-    ocp.constraints.lh_e = np.array([-1e-2, -1e-2])
-    ocp.constraints.uh_e = np.array([1e-2, 1e-2])
 
     # Initial constraints (36 equations: 8 for u_diff == 0 + 28)
     ocp.constraints.lh_0 = np.array([0.0]*8 + lh + lh)
@@ -408,5 +398,8 @@ def create_lipm_ocp(
     ocp.solver_options.nlp_solver_tol_eq = 1e-3     # NLP solver equality tolerance
     ocp.solver_options.nlp_solver_tol_ineq = 1e-3   # NLP solver inequality tolerance
     ocp.solver_options.nlp_solver_tol_comp = 1e-3   # NLP solver complementarity tolerance
+
+
+
 
     return AcadosOcpSolver(ocp)

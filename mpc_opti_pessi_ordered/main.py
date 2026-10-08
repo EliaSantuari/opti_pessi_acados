@@ -67,12 +67,16 @@ def main():
 
     # ---- Data logging structures ----
     history_X = []
+    history_pred_op = []
+    history_pred_pe = []
     history_U = []
     history_obs = []
     # Lists for tracking distances between feet and hips
     dist_p0_curr, dist_p1_curr, dist_p0_next, dist_p1_next = [], [], [], []
     # Computational time history
     time_hist = []
+    time_lin = []
+    time_qp = []
 
     foot_positions_world = {'FL': [], 'FR': [], 'RL': [], 'RR': []}
 
@@ -308,6 +312,7 @@ def main():
             
         # ---- Solve the OCP ----
         status = solver.solve()
+
         
         # if status != 0:
             # solver.print_statistics()
@@ -316,6 +321,8 @@ def main():
         # Computation time
         solve_time = solver.get_stats('time_tot')
         time_hist.append(solve_time)
+        time_lin.append(solver.get_stats('time_lin'))
+        time_qp.append(solver.get_stats('time_qp'))
 
 
         # Extract the state and the control computed by the solver
@@ -345,7 +352,15 @@ def main():
             foot_positions_world[current_gait[1]].append(u_apply[2:4])
 
 
-        
+        # Save the predicted states
+        pred_op = np.array([
+            np.asarray(solver.get(k, 'x')).reshape(-1)[0:2] for k in range(1, sim_cfg.N_horizon+1)
+        ])
+        pred_pe = np.array([
+            np.asarray(solver.get(k, 'x')).reshape(-1)[11:13] for k in range(1, sim_cfg.N_horizon+1)
+        ])
+        history_pred_op.append(pred_op)
+        history_pred_pe.append(pred_pe)
         
         # Future (X_next) position scheduled by the controller
         hips_next = gait_planner.compute_hip_positions(X_next_sim[0:3], current_gait)
@@ -367,8 +382,7 @@ def main():
         history_U.append(u_apply)
 
         # Print some data for debugging and monitoring
-        if step % 1 == 0:
-            print(f"Step {step:02} | Pos: [{X_sim[0]:.2f}, {X_sim[1]:.2f}] | Theta: {np.rad2deg(X_sim[2]):.1f} deg | dt: {dt_chosen*1000:.1f} ms | Comp. time: {solve_time*1000:.1f} ms")
+        print(f"Step {step:02} | Pos: [{X_sim[0]:.2f}, {X_sim[1]:.2f}] | Theta: {np.rad2deg(X_sim[2]):.1f} deg | dt: {dt_chosen*1000:.1f} ms | Comp. time: {solve_time*1000:.1f} ms")
 
 
         # Control if the robot reached the target, if so stop the simulation
@@ -383,13 +397,17 @@ def main():
         # For the future step - in the real implementation here we will have the sensors data
         X_sim = X_next_sim
 
-    print(f"Average computational time: {np.mean(time_hist)*1000:.2f} ms")
+
+    print(f"Average computational time: {np.mean(time_hist)*1000:.3f} ms")
+    print(f"Average linearization time (preparation of QP, computing gradients and Hessians): {np.mean(time_lin)*1000:.3f} ms")
+    print(f"Average QP solve time: {np.mean(time_qp)*1000:.3f} ms")
+
 
     # ---- Plotting ----
     plot_simulation_results(
         history_X, history_U, history_obs, foot_positions_world, 
         (dist_p0_curr, dist_p1_curr, dist_p0_next, dist_p1_next),
-        (sim_cfg.c_target, sim_cfg.theta_target), (obs_cfg.pos_init, obs_cfg.r_obs, obs_cfg.y_dot_max)
+        (sim_cfg.c_target, sim_cfg.theta_target), (obs_cfg.pos_init, obs_cfg.r_obs, obs_cfg.y_dot_max), history_pred_op=history_pred_op, history_pred_pe=history_pred_pe
     )
 
 
