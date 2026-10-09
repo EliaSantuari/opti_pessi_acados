@@ -194,6 +194,7 @@ def create_lipm_ocp(
     delta_p1_move_op = p1_next_op - p1_op
     hip_err_0_op = p0_next_op - hip0_expr_next_op # Penalize distance from the shoulder
     hip_err_1_op = p1_next_op - hip1_expr_next_op
+    
 
     cost_y_expr_op = cs.vertcat(
         c_op, vel_err_op, c_dot_op, theta_dot_op, x_op[10],
@@ -225,6 +226,7 @@ def create_lipm_ocp(
     delta_p1_move_pe = p1_next_pe - p1_pe
     hip_err_0_pe = p0_next_pe - hip0_expr_next_pe 
     hip_err_1_pe = p1_next_pe - hip1_expr_next_pe
+    
 
     cost_y_expr_pe = cs.vertcat(
         c_pe, vel_err_pe, c_dot_pe, theta_dot_pe, x_pe[10],
@@ -348,8 +350,8 @@ def create_lipm_ocp(
     # Soft constraints on non linear constraints
     # Z: quadratic penalty - z: linear penalty
     # [4x Kinematic] + [7x Collision] + [2x velocities]
-    Zu_sh_branch = [1e4]*4 + [1e6]*6 + [1e3]*2
-    zu_sh_branch = [1e3]*4 + [1e5]*6 + [1e2]*2
+    Zu_sh_branch = [1e5]*4 + [1e6]*6 + [1e3]*2
+    zu_sh_branch = [1e4]*4 + [1e5]*6 + [1e2]*2
     Zl_sh_branch = [0.0]*4 + [0.0]*6 + [1e3]*2
     zl_sh_branch = [0.0]*4 + [0.0]*6 + [1e2]*2
 
@@ -393,11 +395,12 @@ def create_lipm_ocp(
     ocp.solver_options.nlp_solver_max_iter = 4
     # ocp.solver_options.qp_solver_warm_start = 1
     ocp.solver_options.globalization = 'MERIT_BACKTRACKING' # performs a merit function based backtracking line search following
-    ocp.solver_options.levenberg_marquardt = 1e-3   # regolarization for the hessian diagonal elements
-    ocp.solver_options.nlp_solver_tol_stat = 1e-3   # NLP solver stationarity tolerance. Type: float > 0 Default: 1e-6
-    ocp.solver_options.nlp_solver_tol_eq = 1e-3     # NLP solver equality tolerance
-    ocp.solver_options.nlp_solver_tol_ineq = 1e-3   # NLP solver inequality tolerance
-    ocp.solver_options.nlp_solver_tol_comp = 1e-3   # NLP solver complementarity tolerance
+    ocp.solver_options.levenberg_marquardt = 1e-4   # regolarization for the hessian diagonal elements
+    tol = 1e-4
+    ocp.solver_options.nlp_solver_tol_stat = tol   # NLP solver stationarity tolerance. Type: float > 0 Default: 1e-6
+    ocp.solver_options.nlp_solver_tol_eq = tol     # NLP solver equality tolerance
+    ocp.solver_options.nlp_solver_tol_ineq = tol   # NLP solver inequality tolerance
+    ocp.solver_options.nlp_solver_tol_comp = tol   # NLP solver complementarity tolerance
 
 
 

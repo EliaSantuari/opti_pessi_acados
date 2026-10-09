@@ -11,8 +11,8 @@ class RobotConfig:
     Iz: float = 1.048       # kg/m^2
     off_x: float = 0.2407   # m
     off_y: float = 0.134    # m
-    mu: float = 0.6         # 
-    max_ext_sq: float = 0.1 # m: Leg extension limit squared
+    mu: float = 0.8         # 
+    max_ext_sq: float = 0.3**2 # m: Leg extension limit squared
     # Initial state
     x_init: np.ndarray = np.array([-0.8, -0.5]) # m
     theta_init: float = np.deg2rad(0) # deg
@@ -39,11 +39,11 @@ class MPCWeights:
     yaw_rate: float = 1             # 5: Yaw rate (penalization on fast rotations)
     time_weight: float = 1e-6       # 6: Time
     anti_skating: float = 10.0      # 7-10: Anti-Skating foot 0 and 1
-    posture: float = 1e4          # 11-14: Posture (keep hips above feet)
-    alpha_weight: float = 1         # 15: Alpha
-    dt_weight: float = 1e-3         # 16: dt
-    f_diff_weight: float = 10       # f_diff NOT USED
-    theta_dyn: float = 10.0         # Theta dynamic NOT USED
+    posture: float = 1e4              # 11-14: Posture (keep hips above feet)
+    alpha_weight: float = 1            # 15: Alpha
+    dt_weight: float = 1e-3           # 16: dt
+    f_diff_weight: float = 10        # f_diff NOT USED
+    theta_dyn: float = 10            # Theta dynamic NOT USED
 
 
 @dataclass
@@ -66,7 +66,7 @@ class ObstacleConfig:
     r_obs: float = 0.2
     speed: float = 0.5              # actual velocity of the obstacle
     y_dot_max: float = 1         # velocity against which the pessimistic is robust
-    obs_type: str = "dynamic" # "static", "dynamic", "adversarial", "circular"
+    obs_type: str = "circular" # "static", "dynamic", "adversarial", "circular"
     # Dynamic
     top_pos_dyn: np.ndarray = np.array([0.1, 1])
     bot_pos_dyn: np.ndarray = np.array([0.1, -1])

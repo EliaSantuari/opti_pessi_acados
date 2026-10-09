@@ -3,7 +3,7 @@ import casadi as cs
 import matplotlib.pyplot as plt
 from lipm_model import create_lipm_ocp
 from gait_planner import GaitPlanner
-from visualizer import plot_simulation_results, plot_computational_time
+from visualizer import plot_simulation_results, plot_computational_time, plot_friction_cones
 from config import RobotConfig, MPCWeights, SimulationConfig, ObstacleConfig, Limits
 
 
@@ -77,6 +77,12 @@ def main():
     time_hist = []
     time_lin = []
     time_qp = []
+
+    # History of forces and friction cones
+    cone0_hist = []
+    cone1_hist = []
+    f0_hist = []
+    f1_hist = []
 
     foot_positions_world = {'FL': [], 'FR': [], 'RL': [], 'RR': []}
 
@@ -337,11 +343,48 @@ def main():
         X_sol_t_prec.append(solver.get(sim_cfg.N_horizon, 'x'))
 
 
+        # ----- Reconstruction of friction cones and forces on feet-----
+        # u: p0next_x, p0next_y, p1next_x, p1next_y, alpha, beta, gamma, dt, ax, ay, b
+        alpha_current = u_opt_22[4]
+        cone0 = robot_cfg.mu * (1-alpha_current) * robot_cfg.m * robot_cfg.g
+        cone1 = robot_cfg.mu * alpha_current * robot_cfg.m * robot_cfg.g
+
+        cone0_hist.append(cone0)
+        cone1_hist.append(cone1)
+
+        # Reconstruction of forces
+        p0_next_x_curr, p0_next_y_curr = u_opt_22[0], u_opt_22[1]
+        p1_next_x_curr, p1_next_y_curr = u_opt_22[2], u_opt_22[3]
+        u_cop_x = p0_next_x_curr + alpha_current*(p1_next_x_curr - p0_next_x_curr)
+        u_cop_y = p0_next_y_curr + alpha_current*(p1_next_y_curr - p0_next_y_curr)
+        c_x_curr, c_y_curr = X_next_22[0], X_next_22[1]
+
+        c_ddot_x = robot_cfg.g / robot_cfg.h_com * (c_x_curr - u_cop_x)
+        c_ddot_y = robot_cfg.g / robot_cfg.h_com * (c_y_curr - u_cop_y)
+
+        f0x_curr = u_opt_22[5] * robot_cfg.m * c_ddot_x
+        f0y_curr = u_opt_22[6] * robot_cfg.m * c_ddot_y
+        f1x_curr = (1-u_opt_22[5]) * robot_cfg.m * c_ddot_x
+        f1y_curr = (1-u_opt_22[6]) * robot_cfg.m * c_ddot_y
+
+        f0_curr = np.sqrt(f0x_curr**2 + f0y_curr**2)
+        f1_curr = np.sqrt(f1x_curr**2 + f1y_curr**2)
+
+        f0_hist.append(f0_curr)
+        f1_hist.append(f1_curr)
+
+        # Log if the force is bigger than cone
+        if f0_curr > cone0:
+            print(f"\nForce on foot 0 bigger than cone with difference {(f0_curr-cone0):.3f} N at step: {step}")
+        if f1_curr > cone1:
+            print(f"\nForce on foot 1 bigger than cone with difference {(f1_curr-cone1):.3f} N at step: {step}")
+
+        # Save solution
         u_apply = u_opt_22[0:11]
         X_next_sim = X_next_22[11:22]
 
 
-
+        # ----- PUSH -----
         if PUSH and step == push_step:
             # Parameters of the push
             force_x = -30
@@ -407,7 +450,7 @@ def main():
         if dist_to_target < 0.1: # 5 cm threshold
             reached_target_flag += 1
             if reached_target_flag == 5:
-                print(f"\n[INFO] Target {sim_cfg.c_target} reached successfully at step {step}!")
+                print(f"\n[INFO] Target {sim_cfg.c_target} reached successfully at step {step}!\n")
                 X_sim = X_next_sim
                 break
 
@@ -422,8 +465,24 @@ def main():
     print(f"Average QP solve time: {np.mean(time_qp)*1000:.3f} ms")
 
 
+    # Check how many times force is bigger than the friction cones
+    counter_0 = 0
+    counter_1 = 0
+    for i in range(len(cone0_hist)):
+        if cone0_hist[i] < f0_hist[i]:
+            counter_0 += 1
+        if cone1_hist[i] < f1_hist[i]:
+            counter_1 += 1
+
+    print("\n **** Friction cones check ****")
+    print(f"Foot 0: force bigger than friction {counter_0} times")
+    print(f"Foot 1: force bigger than friction {counter_1} times")
+
+
     # ---- Plotting ----
     plot_computational_time(time_hist)
+
+    plot_friction_cones(cone0_hist, cone1_hist, f0_hist, f1_hist)
 
     plot_simulation_results(
         history_X, history_U, history_obs, foot_positions_world, 

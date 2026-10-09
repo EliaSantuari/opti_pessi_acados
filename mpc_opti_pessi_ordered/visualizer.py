@@ -23,6 +23,37 @@ def draw_robot(ax, c_x, c_y, theta, alpha=0.3):
     ax.plot([c_x, front_mid[0]], [c_y, front_mid[1]], color='red', alpha=alpha, linewidth=2)
 
 
+
+def plot_friction_cones(cone_0_hist, cone_1_hist, f0_hist, f1_hist):
+    cone0 = np.array(cone_0_hist)
+    cone1 = np.array(cone_1_hist)
+
+    plt.figure(figsize=(10, 6))
+    plt.suptitle('Friction Cones VS Actual Forces', fontsize=14, fontweight='bold')
+
+    # Primo grafico - Piede 0
+    plt.subplot(2, 1, 1)
+    plt.plot(cone0, label='Friction cone of foot 0', color='#1f77b4', linewidth=1)
+    plt.plot(f0_hist, label="Force on foot 0", color='#ff7f0e', linewidth=1)
+    plt.ylabel('Forces [N]')
+    plt.grid(True, linestyle='--', alpha=0.6)
+    plt.legend(loc='upper right')
+
+    # Secondo grafico - Piede 1
+    plt.subplot(2, 1, 2)
+    plt.plot(cone1, label='Friction cone of foot 1', color='#1f77b4', linewidth=1)
+    plt.plot(f1_hist, label="Force on foot 1", color='#ff7f0e', linewidth=1)
+    plt.xlabel('Step')
+    plt.ylabel('Forces [N]')
+    plt.grid(True, linestyle='--', alpha=0.6)
+    plt.legend(loc='upper right')
+
+    # Sistemazione del layout per evitare sovrapposizioni
+    plt.tight_layout()
+
+
+
+
 def plot_computational_time(comp_time_hist, deadline_ms = 25):
     times = np.array(comp_time_hist)*1000
     
