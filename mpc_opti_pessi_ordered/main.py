@@ -3,7 +3,7 @@ import casadi as cs
 import matplotlib.pyplot as plt
 from lipm_model import create_lipm_ocp
 from gait_planner import GaitPlanner
-from visualizer import plot_simulation_results
+from visualizer import plot_simulation_results, plot_computational_time
 from config import RobotConfig, MPCWeights, SimulationConfig, ObstacleConfig, Limits
 
 
@@ -399,16 +399,21 @@ def main():
 
 
     print(f"Average computational time: {np.mean(time_hist)*1000:.3f} ms")
+    print(f"Standard deviation of the computational time: {np.std(time_hist)*1000:.3f}")
+    print(f"Maximum comutational time: {max(time_hist)*1000:.3f}")
     print(f"Average linearization time (preparation of QP, computing gradients and Hessians): {np.mean(time_lin)*1000:.3f} ms")
     print(f"Average QP solve time: {np.mean(time_qp)*1000:.3f} ms")
 
 
     # ---- Plotting ----
+    plot_computational_time(time_hist)
+
     plot_simulation_results(
         history_X, history_U, history_obs, foot_positions_world, 
         (dist_p0_curr, dist_p1_curr, dist_p0_next, dist_p1_next),
         (sim_cfg.c_target, sim_cfg.theta_target), (obs_cfg.pos_init, obs_cfg.r_obs, obs_cfg.y_dot_max), history_pred_op=history_pred_op, history_pred_pe=history_pred_pe
     )
+
 
 
 if __name__ == "__main__":

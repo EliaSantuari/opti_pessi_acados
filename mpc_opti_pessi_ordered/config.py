@@ -34,7 +34,7 @@ class Limits:
 class MPCWeights:
     # Weights for the optimistic branch (W_diag_op)
     tracking_xy: float = 5.0        # 0-1: Tracking x, y
-    vel_alignment: float = 60.0     # 2: Velocity alignment - penalize lateral walk
+    vel_alignment: float = 1e-3     # 2: Velocity alignment - penalize lateral walk
     vel_xy: float = 5.0             # 3-4: Velocity x, y
     yaw_rate: float = 1             # 5: Yaw rate (penalization on fast rotations)
     time_weight: float = 1e-6       # 6: Time
@@ -49,12 +49,12 @@ class MPCWeights:
 @dataclass
 class SimulationConfig:
     N_horizon: int = 7
-    sim_steps: int = 400
+    sim_steps: int = 200
     steps_per_phase: int = 1
     c_target: np.ndarray = np.array([1, 0.2]) # Target position
     theta_target: float = np.deg2rad(0)         # Target orientation
-    solver_type: str = 'SQP_RTI' # SQP, SQP_RTI
-    max_iter: int = None
+    solver_type: str = 'SQP' # SQP, SQP_RTI
+    max_iter: int = 4
 
 
 
@@ -62,13 +62,13 @@ class SimulationConfig:
 @dataclass
 class ObstacleConfig:
     # General
-    pos_init: np.ndarray = np.array([0.0, 0.5]) #np.array([0.1, 1.0])
+    pos_init: np.ndarray = np.array([0.1, 1.0]) #np.array([0.1, 1.0])
     r_obs: float = 0.2
-    speed: float = 1            # actual velocity of the obstacle
-    y_dot_max: float = 1        # velocity against which the pessimistic is robust
-    obs_type: str = "circular" # "static", "dynamic", "adversarial", "circular"
+    speed: float = 0.5              # actual velocity of the obstacle
+    y_dot_max: float = 1         # velocity against which the pessimistic is robust
+    obs_type: str = "dynamic" # "static", "dynamic", "adversarial", "circular"
     # Dynamic
-    top_pos_dyn: np.ndarray = np.array([0.1, 0.5])
+    top_pos_dyn: np.ndarray = np.array([0.1, 1])
     bot_pos_dyn: np.ndarray = np.array([0.1, -1])
     # Circular - make a circle around center starting from pos_init
     center: np.ndarray = np.array([1.0, 0.2])

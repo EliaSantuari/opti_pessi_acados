@@ -23,6 +23,38 @@ def draw_robot(ax, c_x, c_y, theta, alpha=0.3):
     ax.plot([c_x, front_mid[0]], [c_y, front_mid[1]], color='red', alpha=alpha, linewidth=2)
 
 
+def plot_computational_time(comp_time_hist, deadline_ms = 25):
+    times = np.array(comp_time_hist)*1000
+    
+    # Calcolo statistiche
+    mean_time = np.mean(times)
+    max_time = np.max(times)
+    missed_deadlines = np.sum(times > deadline_ms)
+    miss_rate = (missed_deadlines / len(times)) * 100
+    
+    # print(f"--- Statistiche MPC ---")
+    # print(f"Tempo Medio: {mean_time:.3f} ms")
+    # print(f"Tempo Massimo (Worst-case): {max_time:.3f} ms")
+    # print(f"Deadline Miss Rate (> {deadline_ms} ms): {miss_rate:.2f}% ({missed_deadlines} step)")
+    
+    # Creazione del plot
+    plt.figure(figsize=(10, 5))
+    plt.plot(times, label='Tempo di computazione', color='#1f77b4', linewidth=1)
+    
+    # Linee di riferimento
+    plt.axhline(y=deadline_ms, color='red', linestyle='--', 
+                label=f'Real-time Deadline ({deadline_ms} ms)')
+    plt.axhline(y=mean_time, color='green', linestyle='-.', 
+                label=f'Media: {mean_time:.2f} ms')
+    
+    # Formattazione
+    plt.title('Analisi dei Tempi di Computazione MPC')
+    plt.xlabel('Step di controllo')
+    plt.ylabel('Tempo di computazione (ms)')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    
 
 
 from matplotlib.animation import FuncAnimation
@@ -269,52 +301,52 @@ def plot_simulation_results(history_X, history_U, history_obs, foot_positions_wo
     obs_pos, obs_r, y_dot_max = obs_params
     dist_p0_curr, dist_p1_curr, dist_p0_next, dist_p1_next = distances
 
-    # --- 1. Trajectory & Robot Shape ---
-    fig1, ax1 = plt.subplots(figsize=(12, 8))
-    ax1.plot(traj[:, 0], traj[:, 1], 'k--', label='CoM Trajectory', alpha=0.5)
-    ax1.plot(c_target[0], c_target[1], 'rx', markersize=15, markeredgewidth=3, label='Target')
+    # # --- 1. Trajectory & Robot Shape ---
+    # fig1, ax1 = plt.subplots(figsize=(12, 8))
+    # ax1.plot(traj[:, 0], traj[:, 1], 'k--', label='CoM Trajectory', alpha=0.5)
+    # ax1.plot(c_target[0], c_target[1], 'rx', markersize=15, markeredgewidth=3, label='Target')
 
-    style_map = {'FL': ('blue', '^'), 'FR': ('cyan', 'v'), 'RL': ('green', '<'), 'RR': ('orange', '>')}
+    # style_map = {'FL': ('blue', '^'), 'FR': ('cyan', 'v'), 'RL': ('green', '<'), 'RR': ('orange', '>')}
     
-    # Disegna le impronte e aggiunge la NUMERAZIONE
-    for leg, pos_list in foot_positions_world.items():
-        if len(pos_list) > 0:
-            pos_arr = np.array(pos_list)
-            color, marker = style_map[leg]
-            ax1.scatter(pos_arr[:, 0], pos_arr[:, 1], c=color, marker=marker, 
-                       label=f'Piede {leg}', s=90, edgecolors='black', alpha=0.8, zorder=3)
+    # # Disegna le impronte e aggiunge la NUMERAZIONE
+    # for leg, pos_list in foot_positions_world.items():
+    #     if len(pos_list) > 0:
+    #         pos_arr = np.array(pos_list)
+    #         color, marker = style_map[leg]
+    #         ax1.scatter(pos_arr[:, 0], pos_arr[:, 1], c=color, marker=marker, 
+    #                    label=f'Piede {leg}', s=90, edgecolors='black', alpha=0.8, zorder=3)
             
-            # Aggiunge il numero del passo accanto all'impronta
-            for step_idx, pos in enumerate(pos_arr):
-                ax1.annotate(str(step_idx + 1), (pos[0], pos[1]), textcoords="offset points", 
-                             xytext=(6, 6), ha='center', fontsize=9, color=color, weight='bold')
+    #         # Aggiunge il numero del passo accanto all'impronta
+    #         for step_idx, pos in enumerate(pos_arr):
+    #             ax1.annotate(str(step_idx + 1), (pos[0], pos[1]), textcoords="offset points", 
+    #                          xytext=(6, 6), ha='center', fontsize=9, color=color, weight='bold')
 
-    # Disegna la sagoma del robot e le GAMBE
-    # Aumentiamo l'intervallo per non creare un "verme" nero incomprensibile
-    # draw_interval = max(1, len(traj) // 10) # Disegna circa 10-15 sagome in tutto
+    # # Disegna la sagoma del robot e le GAMBE
+    # # Aumentiamo l'intervallo per non creare un "verme" nero incomprensibile
+    # # draw_interval = max(1, len(traj) // 10) # Disegna circa 10-15 sagome in tutto
     draw_interval = sim_cfg.steps_per_phase
     
-    for i in range(0, len(traj), draw_interval):
-        alpha_val = 0.8 if (i == 0 or i >= len(traj) - draw_interval) else 0.3
-        c_x, c_y, theta = traj[i, 0], traj[i, 1], traj[i, 2]
+    # for i in range(0, len(traj), draw_interval):
+    #     alpha_val = 0.8 if (i == 0 or i >= len(traj) - draw_interval) else 0.3
+    #     c_x, c_y, theta = traj[i, 0], traj[i, 1], traj[i, 2]
         
-        # 1. Disegna il corpo
-        draw_robot(ax1, c_x, c_y, theta, alpha=alpha_val)
+    #     # 1. Disegna il corpo
+    #     draw_robot(ax1, c_x, c_y, theta, alpha=alpha_val)
         
-        # 2. Estrai la posizione dei 2 piedi attualmente a terra (da history_X)
-        p0_x, p0_y = traj[i, 6], traj[i, 7]
-        p1_x, p1_y = traj[i, 8], traj[i, 9]
+    #     # 2. Estrai la posizione dei 2 piedi attualmente a terra (da history_X)
+    #     p0_x, p0_y = traj[i, 6], traj[i, 7]
+    #     p1_x, p1_y = traj[i, 8], traj[i, 9]
         
-        # 3. Disegna le linee (gambe) che collegano il CoM ai piedi attivi in quel momento
-        ax1.plot([c_x, p0_x], [c_y, p0_y], color='black', linestyle=':', linewidth=1.5, alpha=alpha_val)
-        ax1.plot([c_x, p1_x], [c_y, p1_y], color='black', linestyle=':', linewidth=1.5, alpha=alpha_val)
+    #     # 3. Disegna le linee (gambe) che collegano il CoM ai piedi attivi in quel momento
+    #     ax1.plot([c_x, p0_x], [c_y, p0_y], color='black', linestyle=':', linewidth=1.5, alpha=alpha_val)
+    #     ax1.plot([c_x, p1_x], [c_y, p1_y], color='black', linestyle=':', linewidth=1.5, alpha=alpha_val)
     
-    # Disegna sempre l'ultima sagoma e le ultime gambe a fine simulazione
-    draw_robot(ax1, traj[-1, 0], traj[-1, 1], traj[-1, 2], alpha=0.9)
-    ax1.plot([traj[-1, 0], traj[-1, 6]], [traj[-1, 1], traj[-1, 7]], color='black', linestyle=':', linewidth=1.5, alpha=0.9)
-    ax1.plot([traj[-1, 0], traj[-1, 8]], [traj[-1, 1], traj[-1, 9]], color='black', linestyle=':', linewidth=1.5, alpha=0.9)
+    # # Disegna sempre l'ultima sagoma e le ultime gambe a fine simulazione
+    # draw_robot(ax1, traj[-1, 0], traj[-1, 1], traj[-1, 2], alpha=0.9)
+    # ax1.plot([traj[-1, 0], traj[-1, 6]], [traj[-1, 1], traj[-1, 7]], color='black', linestyle=':', linewidth=1.5, alpha=0.9)
+    # ax1.plot([traj[-1, 0], traj[-1, 8]], [traj[-1, 1], traj[-1, 9]], color='black', linestyle=':', linewidth=1.5, alpha=0.9)
     
-    ax1.plot(obs_pos[0], obs_pos[1], 'ro', markersize=6, label='Centro Ostacolo')
+    # ax1.plot(obs_pos[0], obs_pos[1], 'ro', markersize=6, label='Centro Ostacolo')
 
     # --- 2. Velocities (con linee dei limiti max/min) ---
     fig_v, axs_v = plt.subplots(3, 1, figsize=(12, 8), sharex=True)
@@ -415,6 +447,12 @@ def plot_simulation_results(history_X, history_U, history_obs, foot_positions_wo
 
 
 
+
+
+
+
+
+
     # --- 5. PLOT PULITO: COM ROBOT VS OSTACOLO IN MOVIMENTO ---
     fig_clean, ax_clean = plt.subplots(figsize=(10, 8))
     
@@ -454,6 +492,11 @@ def plot_simulation_results(history_X, history_U, history_obs, foot_positions_wo
     ax_clean.legend(loc='best')
     ax_clean.grid(True)
     ax_clean.axis('equal')
+
+
+
+
+
 
     # --- 1. Trajectory & Robot Shape (Tutti i piedi campionati collegati) ---
     fig1, ax1 = plt.subplots(figsize=(10, 8))
