@@ -24,7 +24,7 @@ def main():
 
 
     # Push simulation
-    PUSH = 1
+    PUSH = 0
     push_step = 50
 
 
@@ -339,6 +339,23 @@ def main():
 
         u_apply = u_opt_22[0:11]
         X_next_sim = X_next_22[11:22]
+
+
+
+        if PUSH and step == push_step:
+            # Parameters of the push
+            force_x = -30
+            force_y = -30
+            push_duration = 0.3
+
+            delta_vx = (force_x * push_duration) / robot_cfg.m
+            delta_vy = (force_y * push_duration) / robot_cfg.m
+
+            X_next_sim[3] += delta_vx
+            X_next_sim[4] += delta_vy
+
+            print(f"Push activated at step: {step} of {force_x} N along x and {force_y} N along y!")
+            print(f"The force applied a delta in velocity of {delta_vx:.4f} m/s along x and {delta_vy:.4f} m/s along y")
 
 
         #### Logging ####

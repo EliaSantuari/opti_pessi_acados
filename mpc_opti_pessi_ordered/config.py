@@ -34,7 +34,7 @@ class Limits:
 class MPCWeights:
     # Weights for the optimistic branch (W_diag_op)
     tracking_xy: float = 5.0        # 0-1: Tracking x, y
-    vel_alignment: float = 1e-3     # 2: Velocity alignment - penalize lateral walk
+    vel_alignment: float = 10     # 2: Velocity alignment - penalize lateral walk
     vel_xy: float = 5.0             # 3-4: Velocity x, y
     yaw_rate: float = 1             # 5: Yaw rate (penalization on fast rotations)
     time_weight: float = 1e-6       # 6: Time

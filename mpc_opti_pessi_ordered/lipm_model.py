@@ -184,9 +184,9 @@ def create_lipm_ocp(
     # --- Vel heading ---
     # ((vx^2+vy^2)cos(theta)^2-vx^2)^2 + ((vx^2+vy^2)sin(theta)^2-vy^2)^2
     vx_op, vy_op = c_dot_op[0], c_dot_op[1]
-    v_sq_op = vx_op**2 + vy_op**2
-    vel_err_op = (v_sq_op*(cs.cos(theta_op))**2-vx_op**2)**2+(v_sq_op*(cs.sin(theta_op))**2-vy_op**2)**2
-    # vel_err_op = -vx_op * cs.sin(theta_op) + vy_op * cs.cos(theta_op)
+    # v_sq_op = vx_op**2 + vy_op**2
+    # vel_err_op = (v_sq_op*(cs.cos(theta_op))**2-vx_op**2)**2+(v_sq_op*(cs.sin(theta_op))**2-vy_op**2)**2
+    vel_err_op = -vx_op * cs.sin(theta_op) + vy_op * cs.cos(theta_op)
 
 
     # COSTS
@@ -217,9 +217,9 @@ def create_lipm_ocp(
     hip1_expr_next_pe = c_next_pe + R_theta_pe @ hip_offset1
 
     vx_pe, vy_pe = c_dot_pe[0], c_dot_pe[1]
-    v_sq_pe = vx_pe**2 + vy_pe**2
-    vel_err_pe = (v_sq_pe*(cs.cos(theta_pe))**2-vx_pe**2)**2+(v_sq_pe*(cs.sin(theta_pe))**2-vy_pe**2)**2
-    # vel_err_pe = -vx_pe * cs.sin(theta_pe) + vy_pe * cs.cos(theta_pe)
+    # v_sq_pe = vx_pe**2 + vy_pe**2
+    # vel_err_pe = (v_sq_pe*(cs.cos(theta_pe))**2-vx_pe**2)**2+(v_sq_pe*(cs.sin(theta_pe))**2-vy_pe**2)**2
+    vel_err_pe = -vx_pe * cs.sin(theta_pe) + vy_pe * cs.cos(theta_pe)
 
     delta_p0_move_pe = p0_next_pe - p0_pe  
     delta_p1_move_pe = p1_next_pe - p1_pe
