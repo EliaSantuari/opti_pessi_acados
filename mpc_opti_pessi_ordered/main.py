@@ -459,6 +459,7 @@ def main():
 
 
     print(f"Average computational time: {np.mean(time_hist)*1000:.3f} ms")
+    print("-"*10)
     print(f"Standard deviation of the computational time: {np.std(time_hist)*1000:.3f}")
     print(f"Maximum comutational time: {max(time_hist)*1000:.3f}")
     print(f"Average linearization time (preparation of QP, computing gradients and Hessians): {np.mean(time_lin)*1000:.3f} ms")

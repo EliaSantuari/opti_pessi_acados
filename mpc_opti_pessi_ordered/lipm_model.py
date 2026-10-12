@@ -271,11 +271,17 @@ def create_lipm_ocp(
         a, b = u_curr[8:10], u_curr[10]
 
         R_th = cs.vertcat(cs.horzcat(cs.cos(theta_next), -cs.sin(theta_next)), cs.horzcat(cs.sin(theta_next), cs.cos(theta_next)))
-        # Hip position of next step
+        # Hip position of next step correspondent to next foot
         h0_next, h1_next = c_next + R_th @ hip_offset0, c_next + R_th @ hip_offset1
+        # Hip position of next step correspondent to prev foot (invert y)
+        hip_offset0_prec = hip_offset0
+        hip_offset0_prec[1] = -hip_offset0_prec[1]
+        hip_offset1_prec = hip_offset1
+        hip_offset1_prec[1] = -hip_offset1_prec[1]
+        h0_next_prec, h1_next_prec = c_next + R_th @ hip_offset0_prec, c_next + R_th @ hip_offset1_prec
 
         # Hip distance from current step
-        h_dist0_curr, h_dist1_curr = cs.sumsqr(p0 - h0_next), cs.sumsqr(p1 - h1_next)
+        h_dist0_curr, h_dist1_curr = cs.sumsqr(p0 - h0_next_prec), cs.sumsqr(p1 - h1_next_prec)
         # Hip distance from future step
         h_dist0_next, h_dist1_next = cs.sumsqr(p0_next - h0_next), cs.sumsqr(p1_next - h1_next)
 
@@ -396,7 +402,7 @@ def create_lipm_ocp(
     # ocp.solver_options.qp_solver_warm_start = 1
     ocp.solver_options.globalization = 'MERIT_BACKTRACKING' # performs a merit function based backtracking line search following
     ocp.solver_options.levenberg_marquardt = 1e-4   # regolarization for the hessian diagonal elements
-    tol = 1e-4
+    tol = 1e-5
     ocp.solver_options.nlp_solver_tol_stat = tol   # NLP solver stationarity tolerance. Type: float > 0 Default: 1e-6
     ocp.solver_options.nlp_solver_tol_eq = tol     # NLP solver equality tolerance
     ocp.solver_options.nlp_solver_tol_ineq = tol   # NLP solver inequality tolerance
