@@ -104,7 +104,7 @@ def create_lipm_ocp(
     x = cs.vertcat(x_op, x_pe)
 
     n_u = 8 + (3 * obs_conf.N_OBS_MAX)
-    u_op = cs.SX.sym('u_op' ,n_u) # p0next_x, p0next_y, p1next_x, p1next_y, alpha, f_diff_x, f_diff_y, dt, ax, ay, b
+    u_op = cs.SX.sym('u_op' ,n_u) # p0next_x, p0next_y, p1next_x, p1next_y, alpha, beta, gamma, dt, ax, ay, b
     u_pe = cs.SX.sym('u_pe', n_u)
     u = cs.vertcat(u_op, u_pe)
 

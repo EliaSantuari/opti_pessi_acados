@@ -19,7 +19,7 @@ class RandomObstacle:
 
     def update(self, dt):
         # Add noise to the direction for a smooth movement but random
-        noise = np.random.normal(0, 0.5)
+        noise = np.random.normal(0, 1)
         self.heading += noise * dt
 
         # Compute the velocity

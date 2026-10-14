@@ -242,6 +242,8 @@ def animate_robot_feet(history_X, history_obs, obs_r, pred_op, pred_pe, interval
 def plot_simulation_results(history_X, history_U, history_obs, foot_positions_world, distances, target, obs_params, history_pred_op, history_pred_pe):
     traj = np.array(history_X)
     traj_u = np.array(history_U)
+
+    dt_mean = np.mean(traj_u[:, 7])
     
     # Formattazione sicura per N ostacoli
     traj_obs = np.array(history_obs)
@@ -333,7 +335,7 @@ def plot_simulation_results(history_X, history_U, history_obs, foot_positions_wo
         ax1.plot([traj[i, 0], p0_traj[i, 0]], [traj[i, 1], p0_traj[i, 1]], color='gray', linestyle='-', linewidth=0.5, alpha=0.6)
         ax1.plot([traj[i, 0], p1_traj[i, 0]], [traj[i, 1], p1_traj[i, 1]], color='gray', linestyle='-', linewidth=0.5, alpha=0.6)
 
-    ax1.set_title(f'Opti-Pessi MPC, N = {sim_cfg.N_horizon}, sim_T = {len(traj)*0.05:.2f} s', fontsize=14)
+    ax1.set_title(f'Opti-Pessi MPC, N = {sim_cfg.N_horizon}, sim_T = {len(traj)*dt_mean:.2f} s', fontsize=14)
     ax1.legend(loc='upper left'); ax1.grid(True); ax1.axis('equal')
 
     #--- 7. Distanza CoM - Ostacolo ---

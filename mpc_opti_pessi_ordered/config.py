@@ -38,7 +38,7 @@ class MPCWeights:
     vel_xy: float = 5.0             # 3-4: Velocity x, y
     yaw_rate: float = 1             # 5: Yaw rate (penalization on fast rotations)
     time_weight: float = 1e-6       # 6: Time
-    anti_skating: float = 10.0      # 7-10: Anti-Skating foot 0 and 1
+    anti_skating: float = 10      # 7-10: Anti-Skating foot 0 and 1
     posture: float = 1e4              # 11-14: Posture (keep hips above feet)
     alpha_weight: float = 1            # 15: Alpha
     dt_weight: float = 1e-3           # 16: dt
@@ -60,7 +60,7 @@ class SimulationConfig:
 @dataclass
 class ObstacleConfig:
     # General
-    N_OBS_MAX: int = 5 # max number of obstacles
+    N_OBS_MAX: int = 1 # max number of obstacles
     pos_init: np.ndarray = np.array([0.1, 1.0]) #np.array([0.1, 1.0])
     r_obs: float = 0.2
     speed: float = 0.5              # actual velocity of the obstacle

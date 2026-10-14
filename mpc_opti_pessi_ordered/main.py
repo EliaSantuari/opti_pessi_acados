@@ -28,20 +28,25 @@ def main():
     np.random.seed(SEED)
 
     N_OBS_MAX = obs_cfg.N_OBS_MAX
+
     n_u_branch = 8 + (3 * N_OBS_MAX)
+
 
     ## Scenario configuration
     obs_manager = ObstacleManager(n_obs_max=N_OBS_MAX)
-
     # Obstacle bounds
     corridor_bounds = [2.0, 8.0, -2.0, 2.0]
+
 
     obs_manager.add_random_obstacle(start_pos=[3.0, 0.0], radius=0.2, speed=0.3, bounds=corridor_bounds, y_dot_max=obs_cfg.y_dot_max)
     obs_manager.add_random_obstacle(start_pos=[5.0, 0.0], radius=0.15, speed=0.4, bounds=corridor_bounds, y_dot_max=obs_cfg.y_dot_max)
     obs_manager.add_random_obstacle(start_pos=[7.0, 0.0], radius=0.2, speed=0.4, bounds=corridor_bounds, y_dot_max=obs_cfg.y_dot_max)
     obs_manager.add_random_obstacle(start_pos=[6.0, 1.0], radius=0.2, speed=0.4, bounds=corridor_bounds, y_dot_max=obs_cfg.y_dot_max)
 
+
+
     active_obstacles = obs_manager.get_active_obstacles()
+
 
 
     # Push simulation
