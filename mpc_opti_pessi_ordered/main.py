@@ -6,6 +6,8 @@ from gait_planner import GaitPlanner
 from visualizer import plot_simulation_results, plot_computational_time, plot_friction_cones
 from config import RobotConfig, MPCWeights, SimulationConfig, ObstacleConfig, Limits
 
+from obstacle_manager import ObstacleManager
+
 import time
 
 
@@ -15,25 +17,30 @@ import time
 
 
 def main():
-
     # ---- Settings and initialization -----
     sim_cfg = SimulationConfig()
     robot_cfg = RobotConfig()
     obs_cfg = ObstacleConfig()
     weights = MPCWeights()
     limits = Limits()
-
+    # 1, 2
+    SEED = 1234
+    np.random.seed(SEED)
 
     N_OBS_MAX = obs_cfg.N_OBS_MAX
     n_u_branch = 8 + (3 * N_OBS_MAX)
 
-    # Active obstacles 
-    active_obstacles = [
-        {'pos': np.array([2.0, -0.3]), 'r_obs': 0.15, 'y_dot_max':0.0},
-        {'pos': np.array([5.0, 0.3]), 'r_obs': 0.2, 'y_dot_max':0.0},
-        {'pos': np.array([7.0, 1.4]), 'r_obs': 0.2, 'y_dot_max':0.0}
-    ]
+    ## Scenario configuration
+    obs_manager = ObstacleManager(n_obs_max=N_OBS_MAX)
 
+    # Obstacle bounds
+    corridor_bounds = [2.0, 8.0, -2.0, 2.0]
+
+    obs_manager.add_random_obstacle(start_pos=[3.0, 0.0], radius=0.2, speed=0.2, bounds=corridor_bounds, y_dot_max=obs_cfg.y_dot_max)
+    obs_manager.add_random_obstacle(start_pos=[5.0, 0.0], radius=0.15, speed=0.3, bounds=corridor_bounds, y_dot_max=obs_cfg.y_dot_max)
+    obs_manager.add_random_obstacle(start_pos=[7.0, 0.0], radius=0.2, speed=0.3, bounds=corridor_bounds, y_dot_max=obs_cfg.y_dot_max)
+
+    active_obstacles = obs_manager.get_active_obstacles()
 
 
     # Push simulation
@@ -116,69 +123,17 @@ def main():
     yref_e[0:2] = sim_cfg.c_target
     yref_e[6:8] = sim_cfg.c_target
 
-
+    dt_chosen = limits.dt_max
 
 
     print("--- Starting Simulation MPC ---")
 
     for step in range(sim_cfg.sim_steps):
-        #### Definition of the obstacle behaviour ####
-        if obs_cfg.obs_type == "static":
-            obs_pos = obs_cfg.pos_init
-        elif obs_cfg.obs_type == "dynamic":
-            p_top = obs_cfg.top_pos_dyn
-            p_bot = obs_cfg.bot_pos_dyn
-            # Vettore direzione e distanza tra i due punti
-            vec = p_bot - p_top
-            dist_tot = np.linalg.norm(vec)
-            if dist_tot > 1e-5:
-                dir_u = vec / dist_tot # Vettore unitario da top a bot
-                # Distanza totale che l'ostacolo avrebbe percorso in linea retta
-                s_percorso = obs_cfg.speed * t_global
-                # Calcolo della posizione nel ciclo di andata e ritorno (lunghezza totale = 2 * dist_tot)
-                s_ciclo = s_percorso % (2 * dist_tot)
-                if s_ciclo <= dist_tot:
-                    # Fase di andata (da top a bot)
-                    obs_pos = p_top + dir_u * s_ciclo
-                else:
-                    # Fase di ritorno (da bot a top)
-                    obs_pos = p_bot - dir_u * (s_ciclo - dist_tot)
-            else:
-                # Se i due punti coincidono
-                obs_pos = p_top
-        elif obs_cfg.obs_type == "adversarial":
-            if step == 0:
-                obs_pos = obs_cfg.pos_init
-            robot_pos = X_sim[0:2]
-            dir_to_robot = robot_pos - obs_pos
-            dist_to_robot = np.linalg.norm(dir_to_robot)
-            if dist_to_robot > 1e-3:
-                dir_to_robot = dir_to_robot / dist_to_robot
-            dt_step = dt_chosen if 'dt_chosen' in locals() else (limits.dt_max)
-            obs_pos = obs_pos + dir_to_robot * obs_cfg.speed * dt_step
-        elif obs_cfg.obs_type == "circular":
-            # Estraiamo centro e posizione iniziale
-            center_x, center_y = obs_cfg.center[0], obs_cfg.center[1]
-            start_x, start_y = obs_cfg.pos_init[0], obs_cfg.pos_init[1]
-            # 1. Calcoliamo il raggio effettivo come distanza tra centro e partenza
-            dx = start_x - center_x
-            dy = start_y - center_y
-            radius = np.sqrt(dx**2 + dy**2)
-            # Evitiamo divisioni per zero se partenza e centro coincidono
-            if radius < 1e-5:
-                obs_pos = np.array([start_x, start_y])
-            else:
-                # 2. Calcoliamo l'angolo di partenza (fase iniziale) per t=0
-                theta_0 = np.arctan2(dy, dx)
-                # 3. Velocità angolare (omega = v / r)
-                # Il segno definisce il verso (es. positivo = antiorario, negativo = orario)
-                omega = obs_cfg.speed / radius 
-                # 4. Equazioni parametriche del cerchio con fase iniziale
-                obs_pos = np.array([
-                    center_x + radius * np.cos(omega * t_global + theta_0),
-                    center_y + radius * np.sin(omega * t_global + theta_0)
-                ])
-        history_obs.append(obs_pos.copy())
+
+        obs_manager.update_all(dt_chosen)
+        active_obstacles = obs_manager.get_active_obstacles()
+
+        history_obs.append([obs['pos'] for obs in active_obstacles])
 
 
 

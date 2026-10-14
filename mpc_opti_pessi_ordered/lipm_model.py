@@ -460,11 +460,11 @@ def create_lipm_ocp(
     ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
     ocp.solver_options.integrator_type = 'DISCRETE'
     ocp.solver_options.nlp_solver_type = "SQP"
-    ocp.solver_options.nlp_solver_max_iter = 4
+    ocp.solver_options.nlp_solver_max_iter = 5
     # ocp.solver_options.qp_solver_warm_start = 1
     ocp.solver_options.globalization = 'MERIT_BACKTRACKING' # performs a merit function based backtracking line search following
     ocp.solver_options.levenberg_marquardt = 1e-4   # regolarization for the hessian diagonal elements
-    tol = 1e-4
+    tol = 1e-3
     ocp.solver_options.nlp_solver_tol_stat = tol   # NLP solver stationarity tolerance. Type: float > 0 Default: 1e-6
     ocp.solver_options.nlp_solver_tol_eq = tol     # NLP solver equality tolerance
     ocp.solver_options.nlp_solver_tol_ineq = tol   # NLP solver inequality tolerance

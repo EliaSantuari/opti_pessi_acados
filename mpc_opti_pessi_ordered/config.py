@@ -11,7 +11,7 @@ class RobotConfig:
     Iz: float = 1.048       # kg/m^2
     off_x: float = 0.2407   # m
     off_y: float = 0.134    # m
-    mu: float = 0.6         # 
+    mu: float = 0.8         # 
     max_ext_sq: float = 0.3**2 # m: Leg extension limit squared
     # Initial state
     x_init: np.ndarray = np.array([0.0, 0.0]) # m
@@ -20,8 +20,8 @@ class RobotConfig:
 
 @dataclass
 class Limits:
-    dt_min: float = 0.1         # sec
-    dt_max: float = 0.25        # sec
+    dt_min: float = 0.05         # sec
+    dt_max: float = 0.15        # sec
     theta_dot: float = 0.6      # rad/sec 
     v_max_x: float = 1.5        # m/s
     v_max_y: float = 0.45       # m/s
@@ -62,7 +62,7 @@ class SimulationConfig:
 @dataclass
 class ObstacleConfig:
     # General
-    N_OBS_MAX: int = 3 # max number of obstacles
+    N_OBS_MAX: int = 4 # max number of obstacles
     pos_init: np.ndarray = np.array([0.1, 1.0]) #np.array([0.1, 1.0])
     r_obs: float = 0.2
     speed: float = 0.5              # actual velocity of the obstacle
