@@ -570,7 +570,8 @@ def plot_simulation_results(history_X, history_U, history_obs, foot_positions_wo
         # Disegna la linea per p1
         ax1.plot([c_x, p1_x], [c_y, p1_y], color='gray', linestyle='-', linewidth=0.5, alpha=0.6)
 
-    sim_T = len(traj) * 0.05
+    dt_mean = np.mean(traj_u[:, 7])
+    sim_T = len(traj) * dt_mean
     ax1.set_title(f'Opti-Pessi MPC, N = {sim_cfg.N_horizon}, sim_T = {sim_T:.2f} s', fontsize=14)
     
     ax1.set_xlabel('X [m]', fontsize=12)
