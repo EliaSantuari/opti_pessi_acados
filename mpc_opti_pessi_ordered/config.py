@@ -20,8 +20,8 @@ class RobotConfig:
 
 @dataclass
 class Limits:
-    dt_min: float = 0.05         # sec
-    dt_max: float = 0.15        # sec
+    dt_min: float = 0.1         # sec
+    dt_max: float = 0.25        # sec
     theta_dot: float = 0.6      # rad/sec 
     v_max_x: float = 1.5        # m/s
     v_max_y: float = 0.45       # m/s
@@ -42,9 +42,7 @@ class MPCWeights:
     posture: float = 1e4              # 11-14: Posture (keep hips above feet)
     alpha_weight: float = 1            # 15: Alpha
     dt_weight: float = 1e-3           # 16: dt
-    f_diff_weight: float = 10        # f_diff NOT USED
-    theta_dyn: float = 10            # Theta dynamic NOT USED
-
+    
 
 @dataclass
 class SimulationConfig:
@@ -62,7 +60,7 @@ class SimulationConfig:
 @dataclass
 class ObstacleConfig:
     # General
-    N_OBS_MAX: int = 4 # max number of obstacles
+    N_OBS_MAX: int = 5 # max number of obstacles
     pos_init: np.ndarray = np.array([0.1, 1.0]) #np.array([0.1, 1.0])
     r_obs: float = 0.2
     speed: float = 0.5              # actual velocity of the obstacle

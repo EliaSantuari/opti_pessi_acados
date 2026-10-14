@@ -36,9 +36,10 @@ def main():
     # Obstacle bounds
     corridor_bounds = [2.0, 8.0, -2.0, 2.0]
 
-    obs_manager.add_random_obstacle(start_pos=[3.0, 0.0], radius=0.2, speed=0.2, bounds=corridor_bounds, y_dot_max=obs_cfg.y_dot_max)
-    obs_manager.add_random_obstacle(start_pos=[5.0, 0.0], radius=0.15, speed=0.3, bounds=corridor_bounds, y_dot_max=obs_cfg.y_dot_max)
-    obs_manager.add_random_obstacle(start_pos=[7.0, 0.0], radius=0.2, speed=0.3, bounds=corridor_bounds, y_dot_max=obs_cfg.y_dot_max)
+    obs_manager.add_random_obstacle(start_pos=[3.0, 0.0], radius=0.2, speed=0.3, bounds=corridor_bounds, y_dot_max=obs_cfg.y_dot_max)
+    obs_manager.add_random_obstacle(start_pos=[5.0, 0.0], radius=0.15, speed=0.4, bounds=corridor_bounds, y_dot_max=obs_cfg.y_dot_max)
+    obs_manager.add_random_obstacle(start_pos=[7.0, 0.0], radius=0.2, speed=0.4, bounds=corridor_bounds, y_dot_max=obs_cfg.y_dot_max)
+    obs_manager.add_random_obstacle(start_pos=[6.0, 1.0], radius=0.2, speed=0.4, bounds=corridor_bounds, y_dot_max=obs_cfg.y_dot_max)
 
     active_obstacles = obs_manager.get_active_obstacles()
 
@@ -115,13 +116,13 @@ def main():
 
 
     # ---- Update references and parameters over horizon
-    yref = np.zeros(34)
-    yref[0:2] = sim_cfg.c_target
-    yref[17:19] = sim_cfg.c_target
-    # 
-    yref_e = np.zeros(12)
-    yref_e[0:2] = sim_cfg.c_target
-    yref_e[6:8] = sim_cfg.c_target
+    # yref = np.zeros(34)
+    # yref[0:2] = sim_cfg.c_target
+    # yref[17:19] = sim_cfg.c_target
+    # # 
+    # yref_e = np.zeros(12)
+    # yref_e[0:2] = sim_cfg.c_target
+    # yref_e[6:8] = sim_cfg.c_target
 
     dt_chosen = limits.dt_max
 
@@ -150,6 +151,32 @@ def main():
         solver.set(0, "lbx", X_aug)
         solver.set(0, "ubx", X_aug)
 
+
+
+        # LOCAL TARGET
+        dir_to_target = sim_cfg.c_target - X_sim[0:2]
+        dist_to_final = np.linalg.norm(dir_to_target)
+
+        # Robot will look ahead 0.8 m
+        max_lookahead = 0.8
+
+        if dist_to_final > max_lookahead:
+            local_target = X_sim[0:2] + (dir_to_target / dist_to_final) * max_lookahead
+        else:
+            local_target = sim_cfg.c_target
+
+        # Update the reference of the horizon
+        yref = np.zeros(34)
+        yref[0:2] = local_target
+        yref[17:19] = local_target
+
+        yref_e = np.zeros(12)
+        yref_e[0:2] = local_target
+        yref_e[6:8] = local_target
+
+        for k in range(sim_cfg.N_horizon):
+            solver.set(k, 'yref', yref)
+        solver.set(sim_cfg.N_horizon, 'yref', yref_e)
 
         ### Set the parameters
         # Get the horizon of the gait

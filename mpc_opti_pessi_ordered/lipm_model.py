@@ -412,8 +412,8 @@ def create_lipm_ocp(
     # [4x Kinematic] + [7x Collision] + [2x velocities]
     n_soft_collision = 6 * obs_conf.N_OBS_MAX
 
-    Zu_sh_branch = [1e5]*4 + [1e6]*n_soft_collision + [1e3]*2
-    zu_sh_branch = [1e4]*4 + [1e5]*n_soft_collision + [1e2]*2
+    Zu_sh_branch = [1e4]*4 + [1e4]*n_soft_collision + [1e3]*2
+    zu_sh_branch = [1e3]*4 + [1e3]*n_soft_collision + [1e2]*2
     Zl_sh_branch = [0.0]*4 + [0.0]*n_soft_collision + [1e3]*2
     zl_sh_branch = [0.0]*4 + [0.0]*n_soft_collision + [1e2]*2
 
@@ -460,7 +460,7 @@ def create_lipm_ocp(
     ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
     ocp.solver_options.integrator_type = 'DISCRETE'
     ocp.solver_options.nlp_solver_type = "SQP"
-    ocp.solver_options.nlp_solver_max_iter = 5
+    ocp.solver_options.nlp_solver_max_iter = 3
     # ocp.solver_options.qp_solver_warm_start = 1
     ocp.solver_options.globalization = 'MERIT_BACKTRACKING' # performs a merit function based backtracking line search following
     ocp.solver_options.levenberg_marquardt = 1e-4   # regolarization for the hessian diagonal elements
@@ -474,8 +474,6 @@ def create_lipm_ocp(
 
     # Automatically export c_generated_code to cpp work space
     ocp.code_export_directory = '../../mpc_cpp_acados/c_generated_code'
-
-
 
 
 
