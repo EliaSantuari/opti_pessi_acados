@@ -6,7 +6,7 @@ from gait_planner import GaitPlanner
 from visualizer import plot_simulation_results, plot_computational_time, plot_friction_cones
 from config import RobotConfig, MPCWeights, SimulationConfig, ObstacleConfig, Limits
 
-
+import time
 
 
 
@@ -15,12 +15,25 @@ from config import RobotConfig, MPCWeights, SimulationConfig, ObstacleConfig, Li
 
 
 def main():
+
     # ---- Settings and initialization -----
     sim_cfg = SimulationConfig()
     robot_cfg = RobotConfig()
     obs_cfg = ObstacleConfig()
     weights = MPCWeights()
     limits = Limits()
+
+
+    N_OBS_MAX = obs_cfg.N_OBS_MAX
+    n_u_branch = 8 + (3 * N_OBS_MAX)
+
+    # Active obstacles 
+    active_obstacles = [
+        {'pos': np.array([2.0, -0.3]), 'r_obs': 0.15, 'y_dot_max':0.0},
+        {'pos': np.array([5.0, 0.3]), 'r_obs': 0.2, 'y_dot_max':0.0},
+        {'pos': np.array([7.0, 1.4]), 'r_obs': 0.2, 'y_dot_max':0.0}
+    ]
+
 
 
     # Push simulation
@@ -47,10 +60,10 @@ def main():
     # Initialization lists for warm start
     X_sol_t_prec = [X_aug for _ in range(sim_cfg.N_horizon + 1)]
 
-    u_init = np.zeros(22)
+    u_init = np.zeros(2*n_u_branch)
     dt_nominal = limits.dt_max
     u_init[7] = dt_nominal
-    u_init[18] = dt_nominal
+    u_init[n_u_branch+7] = dt_nominal
     U_sol_t_prec = [u_init for _ in range(sim_cfg.N_horizon)]
 
 
@@ -62,8 +75,10 @@ def main():
         x_init=X_aug,
         robot_cfg=robot_cfg,
         weights=weights,
-        sim_conf=sim_cfg    
+        sim_conf=sim_cfg,
+        obs_conf=obs_cfg
         )
+
 
     # ---- Data logging structures ----
     history_X = []
@@ -189,10 +204,20 @@ def main():
             gait_k = gait_horizon[k]
             offset_0 = gait_planner.hip_offsets[gait_k[0]]
             offset_1 = gait_planner.hip_offsets[gait_k[1]]
-            r_dyn = obs_cfg.r_obs + 0.1
-            
+
             # Set params
-            p_val = np.hstack([offset_0, offset_1, obs_pos, r_dyn, obs_cfg.y_dot_max])
+            p_val = np.zeros(4 + (4 * N_OBS_MAX))
+            p_val[0:4] = np.concatenate([offset_0, offset_1])
+
+            for i in range(N_OBS_MAX):
+                idx_p = 4 + (4 * i)
+                if i < len(active_obstacles):
+                    obs = active_obstacles[i]
+                    p_val[idx_p:idx_p+4] = [obs['pos'][0], obs['pos'][1], obs['r_obs']+0.1, obs['y_dot_max']]
+                else:
+                    # Ghost obstacle
+                    p_val[idx_p:idx_p+4] = [15.0 + (2*i), 15.0, 0.0, 0.0]
+            
             solver.set(k, "p", p_val)                    
 
 
@@ -228,63 +253,84 @@ def main():
             hip0_guess_pe = hips_guess_pe[0:2]
             hip1_guess_pe = hips_guess_pe[2:4]
 
-            # Distances of com and hips from obs
-            dist_com_op = np.linalg.norm(obs_pos - com_guess_op)
-            dist_hip0_op = np.linalg.norm(obs_pos - hip0_guess_op)
-            dist_hip1_op = np.linalg.norm(obs_pos - hip1_guess_op)
+            # Compute a and b for each obstacle
 
-            dist_com_pe = np.linalg.norm(obs_pos - com_guess_pe)
-            dist_hip0_pe = np.linalg.norm(obs_pos - hip0_guess_pe)
-            dist_hip1_pe = np.linalg.norm(obs_pos - hip1_guess_pe)
+            u_guess_obs_op = []
+            u_guess_obs_pe = []
 
-            # Who is the closest?
-            min_dist_op = min(dist_com_op, dist_hip0_op, dist_hip1_op)
-            min_dist_pe = min(dist_com_pe, dist_hip0_pe, dist_hip1_pe)
+            for i in range(N_OBS_MAX):
+                if i < len(active_obstacles):
+                    obs_pos_k = active_obstacles[i]['pos']
+                else:
+                    obs_pos_k = np.array([15.0 + (2.0*i), 15.0])
 
-            # Take the closer point
-            if min_dist_op == dist_hip0_op:
-                closest_pt_op = hip0_guess_op
-            elif min_dist_op == dist_hip1_op:
-                closest_pt_op = hip1_guess_op
-            else:
-                closest_pt_op = com_guess_op
+                
+                # Distances of com and hips from obs
+                # Optimistic
+                dist_com_op = np.linalg.norm(obs_pos_k - com_guess_op)
+                dist_hip0_op = np.linalg.norm(obs_pos_k - hip0_guess_op)
+                dist_hip1_op = np.linalg.norm(obs_pos_k - hip1_guess_op)
 
-            if min_dist_pe == dist_hip0_pe:
-                closest_pt_pe = hip0_guess_pe
-            elif min_dist_pe == dist_hip1_pe:
-                closest_pt_pe = hip1_guess_pe
-            else:
-                closest_pt_pe = com_guess_pe
+                # Who is the closest?
+                min_dist_op = min(dist_com_op, dist_hip0_op, dist_hip1_op)
 
-            # Compute the semiplanes
-            dir_to_obs_op = obs_pos - closest_pt_op
-            dist_to_obs_op = np.linalg.norm(dir_to_obs_op) + 1e-5
-            a_guess_op = dir_to_obs_op / dist_to_obs_op
-            b_guess_op = -np.dot(a_guess_op, (closest_pt_op + obs_pos) / 2.0)
+                # Take the closer point
+                if min_dist_op == dist_hip0_op:
+                    closest_pt_op = hip0_guess_op
+                elif min_dist_op == dist_hip1_op:
+                    closest_pt_op = hip1_guess_op
+                else:
+                    closest_pt_op = com_guess_op
 
-            dir_to_obs_pe = obs_pos - closest_pt_pe
-            dist_to_obs_pe = np.linalg.norm(dir_to_obs_pe) + 1e-5
-            a_guess_pe = dir_to_obs_pe / dist_to_obs_pe
-            b_guess_pe = -np.dot(a_guess_pe, (closest_pt_pe + obs_pos) / 2.0)
+
+                # Compute the semiplanes
+                dir_to_obs_op = obs_pos_k - closest_pt_op
+                dist_to_obs_op = np.linalg.norm(dir_to_obs_op) + 1e-5
+                a_guess_op = dir_to_obs_op / dist_to_obs_op
+                b_guess_op = -np.dot(a_guess_op, (closest_pt_op + obs_pos_k) / 2.0)
+
+                u_guess_obs_op.extend([a_guess_op[0], a_guess_op[1], b_guess_op])
+
+
+                # Pessimistic
+                dist_com_pe = np.linalg.norm(obs_pos_k - com_guess_pe)
+                dist_hip0_pe = np.linalg.norm(obs_pos_k - hip0_guess_pe)
+                dist_hip1_pe = np.linalg.norm(obs_pos_k - hip1_guess_pe)
+                
+                # Who is the closest?
+                min_dist_pe = min(dist_com_pe, dist_hip0_pe, dist_hip1_pe)
+                
+                # Take the closer point
+                if min_dist_pe == dist_hip0_pe:
+                    closest_pt_pe = hip0_guess_pe
+                elif min_dist_pe == dist_hip1_pe:
+                    closest_pt_pe = hip1_guess_pe
+                else:
+                    closest_pt_pe = com_guess_pe
+                
+                
+                # Compute the semiplanes
+                dir_to_obs_pe = obs_pos_k - closest_pt_pe
+                dist_to_obs_pe = np.linalg.norm(dir_to_obs_pe) + 1e-5
+                a_guess_pe = dir_to_obs_pe / dist_to_obs_pe
+                b_guess_pe = -np.dot(a_guess_pe, (closest_pt_pe + obs_pos_k) / 2.0)
+                
+                u_guess_obs_pe.extend([a_guess_pe[0], a_guess_pe[1], b_guess_pe])
+            
 
             # Construction of U_guess
-            u_guess_op = np.array([
+            u_guess_op_base = np.array([
                 hips_guess_op[0], hips_guess_op[1], hips_guess_op[2], hips_guess_op[3],
-                0.5,                            # alpha
-                0.0, 0.0,                       # beta, gamma
-                u_prev[7],           # time
-                a_guess_op[0], a_guess_op[1],
-                b_guess_op
+                0.5, 0.0, 0.0, u_prev[7]
             ])
-            u_guess_pe = np.array([
+            u_guess_pe_base = np.array([
                 hips_guess_pe[0], hips_guess_pe[1], hips_guess_pe[2], hips_guess_pe[3],
-                0.5,                            # alpha
-                0.0, 0.0,                       # beta, gamma
-                u_prev[18],           # time
-                a_guess_pe[0], a_guess_pe[1],
-                b_guess_pe
+                0.5, 0.0, 0.0, u_prev[n_u_branch + 7]
             ])
-            
+
+            u_guess_op = np.concatenate([u_guess_op_base, u_guess_obs_op])
+            u_guess_pe = np.concatenate([u_guess_pe_base, u_guess_obs_pe])
+
 
             # First steps must be the same! We could use the pessimistic to be more conservative
             if k == 0:
@@ -308,7 +354,7 @@ def main():
                 x_guess_pe[3:5] = vel_guess_pe
                 x_guess_pe[5] = vel_ang_guess_pe
                 x_guess_pe[6:10] = x_prev[17:21]
-                x_guess_pe[10] = u_prev[18]
+                x_guess_pe[10] = u_prev[n_u_branch+7]
 
                 solver.set(k, 'x', np.concatenate([x_guess_op, x_guess_pe]))
 
@@ -380,7 +426,7 @@ def main():
             print(f"\nForce on foot 1 bigger than cone with difference {(f1_curr-cone1):.3f} N at step: {step}")
 
         # Save solution
-        u_apply = u_opt_22[0:11]
+        u_apply = u_opt_22[0:n_u_branch]
         X_next_sim = X_next_22[11:22]
 
 

@@ -1,7 +1,7 @@
 import casadi as cs
 import numpy as np
 from acados_template import AcadosOcp, AcadosModel, AcadosOcpSolver
-from config import RobotConfig, MPCWeights, Limits, SimulationConfig
+from config import RobotConfig, MPCWeights, Limits, SimulationConfig, ObstacleConfig
 
 
 # I HAVE AN OCP WITH 44 (11+11+11+11) * N VARIABLES but acados uses multiple shooting, thus it divides the problem into temporal nodes and creates a blocks structure for the matrices.
@@ -16,7 +16,8 @@ def create_lipm_ocp(
         robot_cfg: RobotConfig = RobotConfig(),
         weights: MPCWeights = MPCWeights(),
         limits: Limits = Limits(),
-        sim_conf: SimulationConfig = SimulationConfig()
+        sim_conf: SimulationConfig = SimulationConfig(),
+        obs_conf: ObstacleConfig = ObstacleConfig()
     ) -> AcadosOcpSolver:
  
     #### CONFIGURATION ####
@@ -60,8 +61,11 @@ def create_lipm_ocp(
 
     # (eq_norm_a, eq_s[0], eq_s[1], eq_s[2], eq_s[3], eq_p[0], eq_p[1], eq_obs) 
     # eq_s and eq_p ensure hips and feet to be in the negative semiplane (<= 0)
-    lh_obs = [0.5, -1e6, -1e6, -1e6, -1e6, -1e6, -1e6, 0.0] 
-    uh_obs  = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1e6]
+    lh_obs_single = [0.5, -1e6, -1e6, -1e6, -1e6, -1e6, -1e6, 0.0] 
+    uh_obs_single  = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1e6]
+
+    lh_obs = lh_obs_single * obs_conf.N_OBS_MAX
+    uh_obs = uh_obs_single * obs_conf.N_OBS_MAX
 
     # (v_loc_x, v_loc_y) limits local velocities
     lh_vel = [-limits.v_max_x, -limits.v_max_y] 
@@ -77,9 +81,18 @@ def create_lipm_ocp(
     # u_op = [p0_nx, p0_ny, p1_nx, p1_ny, alpha, beta, gamma, dt_var, ax, ay, b]
     dt_min = limits.dt_min / sim_conf.steps_per_phase
     dt_max = limits.dt_max / sim_conf.steps_per_phase
-    # [alpha, beta, gamma, dt_var, ax, ay, b]
-    bnd_u_min = [limits.alpha_min, 0.0, 0.0, dt_min, -1.0, -1.0, -100.0]
-    bnd_u_max = [limits.alpha_max, 1.0, 1.0, dt_max, 1.0, 1.0, 100.0]
+
+    # Limits on 4 controls (alpha, beta, gamma, dt_var)
+    bnd_u_min_robot = [limits.alpha_min, 0.0, 0.0, dt_min]
+    bnd_u_max_robot = [limits.alpha_max, 1.0, 1.0, dt_max]
+
+    # Limits for single semiplane
+    bnd_u_min_single_obs = [-1.0, -1.0, -100.0]
+    bnd_u_max_single_obs = [1.0, 1.0, 100.0]
+    
+    # [alpha, beta, gamma, dt_var, (ax, ay, b)*3]
+    bnd_u_min = bnd_u_min_robot + (bnd_u_min_single_obs * obs_conf.N_OBS_MAX)
+    bnd_u_max = bnd_u_max_robot + (bnd_u_max_single_obs * obs_conf.N_OBS_MAX)
 
     w = np.sqrt(robot_cfg.g / robot_cfg.h_com) # Frequency constant
 
@@ -89,17 +102,17 @@ def create_lipm_ocp(
     x_op = cs.SX.sym('x_op', 11) # cx, cy, theta, cdotx, cdoty, thetadot, p0x, p0y, p1x, p1y, time
     x_pe = cs.SX.sym('x_pe', 11)
     x = cs.vertcat(x_op, x_pe)
-    
-    u_op = cs.SX.sym('u_op', 11) # p0next_x, p0next_y, p1next_x, p1next_y, alpha, f_diff_x, f_diff_y, dt, ax, ay, b
-    u_pe = cs.SX.sym('u_pe', 11)
+
+    n_u = 8 + (3 * obs_conf.N_OBS_MAX)
+    u_op = cs.SX.sym('u_op' ,n_u) # p0next_x, p0next_y, p1next_x, p1next_y, alpha, f_diff_x, f_diff_y, dt, ax, ay, b
+    u_pe = cs.SX.sym('u_pe', n_u)
     u = cs.vertcat(u_op, u_pe)
-    
-    p_sym = cs.SX.sym('p', 8) # hip0_x, hip0_y, hip1_x, hip1_y, obs_x, obs_y, r_obs, y_dot_max
+
+    n_p = 4 + (4 * obs_conf.N_OBS_MAX) # 4 hips_off, (x, y, r, y_dot_max) for each obs
+    p_sym = cs.SX.sym('p', n_p) # hip0_x, hip0_y, hip1_x, hip1_y, obs_x, obs_y, r_obs, y_dot_max
 
     hip_offset0, hip_offset1 = p_sym[0:2], p_sym[2:4]
-    y0_obs = p_sym[4:6]
-    r_obs = p_sym[6] 
-    y_dot_max = p_sym[7]
+    
 
     # --- HELPER FUNCTION FOR DYNAMIC ---
     def compute_dynamic(x_curr, u_curr):
@@ -260,7 +273,7 @@ def create_lipm_ocp(
     ocp.cost.yref, ocp.cost.yref_e = y_ref, y_ref_e
 
     # --- HELPER FUNCTION FOR CONSTRAINTS ---
-    def compute_constraints(x_curr, u_curr, c_next, theta_next, f0, f1, r_obstacle):
+    def compute_constraints(x_curr, u_curr, c_next, theta_next, f0, f1, p_sym_local, is_pessimistic=False):
 
         # Extract current states
         theta = x_curr[2]
@@ -289,47 +302,72 @@ def create_lipm_ocp(
         fric0 = f0[0]**2 + f0[1]**2 - (robot_cfg.mu * (1.0 - u_curr[4]) * robot_cfg.m * robot_cfg.g)**2 + 1e-3
         fric1 = f1[0]**2 + f1[1]**2 - (robot_cfg.mu * u_curr[4] * robot_cfg.m * robot_cfg.g)**2 + 1e-3
 
-        # Separating plane Constraints
-        # 1) Compute the norm of a == 1
-        eq_norm_a = a[0]**2 + a[1]**2 
+        # Initialize lists for obstacle constraints
+        eq_obs_all = []
 
-        # 2) 4 angles of the robot must stay in the negative semiplane(we  don't want the robot to be inside the obstacle)
+        # 4 angles of the robot must stay in the negative semiplane(we  don't want the robot to be inside the obstacle)
         corners = [cs.vertcat(off_x, off_y), cs.vertcat(-off_x, off_y), cs.vertcat(-off_x, -off_y), cs.vertcat(off_x, -off_y)]
-        eq_s = [cs.dot(a, c_next + R_th @ loc) + b for loc in corners]
-        eq_p = [cs.dot(a, p0_next) + b, cs.dot(a, p1_next) + b]  
 
-        # 4) Dynamic obstacle should be in the positive semiplane and distant at least r_obs
-        eq_obs = cs.dot(a, y0_obs) + b - (r_obstacle * (1 + 0.8))
+        # Separating plane Constraints
+        for i in range(obs_conf.N_OBS_MAX):
+            # Extract a and b for obstacle i
+            idx_u = 8 + (i*3)
+            a = u_curr[idx_u : idx_u+2]
+            b = u_curr[idx_u+2]
 
-        # 5) Compute the local velocities
-        v_loc_x = c_dot[0] * cs.cos(theta) + c_dot[1] * cs.sin(theta)
-        v_loc_y = -c_dot[0] * cs.sin(theta) + c_dot[1] * cs.cos(theta)
+            # Extract parameters of obstacle i
+            idx_p = 4 + (i * 4)
+            y0_obs = p_sym_local[idx_p : idx_p+2]
+            r_obs = p_sym_local[idx_p+2]
+            y_dot_max = p_sym_local[idx_p+3]
 
-        return cs.vertcat(h_dist0_curr, h_dist1_curr, h_dist0_next, h_dist1_next, fric0, fric1, eq_norm_a, eq_s[0], eq_s[1], eq_s[2], eq_s[3], eq_p[0], eq_p[1], eq_obs, v_loc_x, v_loc_y)
+            if is_pessimistic:
+                r_dynamic = r_obs + y_dot_max * x_curr[10]
+            else:
+                r_dynamic = r_obs
+
+            # 1) Norma a == 1
+            eq_obs_all.append(a[0]**2 + a[1]**2)
+
+            # 2) Robot corners in negative semiplane
+            for loc in corners:
+                eq_obs_all.append(cs.dot(a, c_next + R_th @ loc) + b)
+
+            # 3) Feet in negative semiplane
+            eq_obs_all.append(cs.dot(a, p0_next) + b)
+            eq_obs_all.append(cs.dot(a, p1_next) + b)
+
+            # 4) Obstacle in positive semiplane
+            eq_obs_all.append(cs.dot(a, y0_obs) + b - (r_dynamic * (1 + 0.8)))
+
+            v_loc_x = c_dot[0] * cs.cos(theta) + c_dot[1] * cs.sin(theta)
+            v_loc_y = -c_dot[0] * cs.sin(theta) + c_dot[1] * cs.cos(theta)
+
+        
+        return cs.vertcat(h_dist0_curr, h_dist1_curr, h_dist0_next, h_dist1_next, fric0, fric1, *eq_obs_all, v_loc_x, v_loc_y)
 
     # 1. Optimistic uses fixed nominal radius
-    con_op = compute_constraints(x_op, u_op, c_next_op, theta_next_op, f0_op, f1_op, r_obs)
+    con_op = compute_constraints(x_op, u_op, c_next_op, theta_next_op, f0_op, f1_op, p_sym)
 
     # 2. Pessimistic uses dynamic growing radius
-    r_dynamic = r_obs + y_dot_max * x_pe[10]
-    con_pe = compute_constraints(x_pe, u_pe, c_next_pe, theta_next_pe, f0_pe, f1_pe, r_dynamic)
+    con_pe = compute_constraints(x_pe, u_pe, c_next_pe, theta_next_pe, f0_pe, f1_pe, p_sym, is_pessimistic=True)
 
-    model.con_h_expr = cs.vertcat(con_op, con_pe) # 28 equations
+    model.con_h_expr = cs.vertcat(con_op, con_pe)
     
     # Decouple separating planes: Only the physical 8 controls are forced equal at node 0
     u_diff = u_op[0:8] - u_pe[0:8] # 8 equations
     model.con_h_expr_0 = cs.vertcat(u_diff, con_op, con_pe)
 
     # Limits
-    lh = lh_robot + lh_obs + lh_vel
-    ocp.constraints.lh = np.array(lh + lh)
+    lh_branch = lh_robot + lh_obs + lh_vel
+    ocp.constraints.lh = np.array(lh_branch + lh_branch)
     
-    uh = uh_robot + uh_obs + uh_vel
-    ocp.constraints.uh = np.array(uh + uh)
+    uh_branch = uh_robot + uh_obs + uh_vel
+    ocp.constraints.uh = np.array(uh_branch + uh_branch)
 
     # Initial constraints (36 equations: 8 for u_diff == 0 + 28)
-    ocp.constraints.lh_0 = np.array([0.0]*8 + lh + lh)
-    ocp.constraints.uh_0 = np.array([0.0]*8 + uh + uh)
+    ocp.constraints.lh_0 = np.array([0.0]*8 + lh_branch + lh_branch)
+    ocp.constraints.uh_0 = np.array([0.0]*8 + uh_branch + uh_branch)
 
     # Constraints on States
     ocp.constraints.x0 = x_init
@@ -343,30 +381,41 @@ def create_lipm_ocp(
     # We have 16 equations to be constrained in h_con, some of them must be softened to simplify the life for the solver
     # We have the soft constraint on the velocities (3) and on the distance from current and next step to hip
 
-    # [0,1,2,3]: distances of feet-hips
-    # [4,5,6]: friction cones and a==1 kept as hard
-    # [7,8,9,10]: Corners collision
-    # [11,12]: Feet collision
-    # [13]: Obstacle collision
-    # [14,15]: Local velocity limits
-    idxsh_branch = [0, 1, 2, 3, 7, 8, 9, 10, 11, 12, 14, 15]
-    idxsh_total = idxsh_branch + [i + 16 for i in idxsh_branch]
+    # For collision of corners (eq_s) and feet collision (eq_p)
+    # 1) Hip-foot distance
+    idxsh_branch = [0, 1, 2, 3]
+
+    # 2) For each obstacle compute its index
+    for i in range(obs_conf.N_OBS_MAX):
+        # First 6 values are lh_robot, each obs adds 8 eqns
+        base_idx = 6 + (8 * i)
+
+        # Make eq_s soft (4 indeces: base+1, base+2, base+3, base+4)
+        idxsh_branch.extend([base_idx+1, base_idx+2, base_idx+3, base_idx+4])
+        # Make sodt eq_p (2 indeces: base+5, base+6)
+        idxsh_branch.extend([base_idx+5, base_idx+6])
+        # eq_norm_a (base_idx) and eq_obs (base_idx+7) remain HARD
+
+    # 3) Local velocities
+    # After the 6 robot eqns and (8*N_max) obs eqns
+    vel_idx = 6 + (8 * obs_conf.N_OBS_MAX)
+    idxsh_branch.extend([vel_idx, vel_idx+1])
+
+    # Unify opt and pes
+    n_h_branc = 8 + (8 * obs_conf.N_OBS_MAX) # Total constraint number for each branch
+    idxsh_total = idxsh_branch + [i + n_h_branc for i in idxsh_branch]
     ocp.constraints.idxsh = np.array(idxsh_total)
+
 
     # Soft constraints on non linear constraints
     # Z: quadratic penalty - z: linear penalty
     # [4x Kinematic] + [7x Collision] + [2x velocities]
-    Zu_sh_branch = [1e5]*4 + [1e6]*6 + [1e3]*2
-    zu_sh_branch = [1e4]*4 + [1e5]*6 + [1e2]*2
-    Zl_sh_branch = [0.0]*4 + [0.0]*6 + [1e3]*2
-    zl_sh_branch = [0.0]*4 + [0.0]*6 + [1e2]*2
+    n_soft_collision = 6 * obs_conf.N_OBS_MAX
 
-
-    # Soft constraints on state limits
-    # Skip the first 8 decoupling eqns for node 0
-    ocp.constraints.idxsh_0 = np.array([i + 8 for i in idxsh_total])
-    # theta_dot is now index 0 for op and 2 for pe
-    ocp.constraints.idxsbx = np.array([0, 2])
+    Zu_sh_branch = [1e5]*4 + [1e6]*n_soft_collision + [1e3]*2
+    zu_sh_branch = [1e4]*4 + [1e5]*n_soft_collision + [1e2]*2
+    Zl_sh_branch = [0.0]*4 + [0.0]*n_soft_collision + [1e3]*2
+    zl_sh_branch = [0.0]*4 + [0.0]*n_soft_collision + [1e2]*2
 
     # These are the weights for the limits (upper and lower) of soft constraints
     # softening only the weight on theta_dot
@@ -387,12 +436,25 @@ def create_lipm_ocp(
     ocp.cost.Zl_0 = np.array(Zl_sh_branch + Zl_sh_branch)
     ocp.cost.zl_0 = np.array(zl_sh_branch + zl_sh_branch)
 
+
+    # Soft constraints on state limits
+    # Skip the first 8 decoupling eqns for node 0
+    ocp.constraints.idxsh_0 = np.array([i + 8 for i in idxsh_total])
+    # theta_dot is now index 0 for op and 2 for pe
+    ocp.constraints.idxsbx = np.array([0, 2])
+
+    
+
     # Constraint on Controls
+    idxbu_op = list(range(4, n_u)) # Skip p0x, p0y, p1x, p1y
+    idxbu_pe = [i + n_u for i in idxbu_op]
+
+
     ocp.constraints.lbu = np.array(bnd_u_min + bnd_u_min)
     ocp.constraints.ubu = np.array(bnd_u_max + bnd_u_max)
-    ocp.constraints.idxbu = np.array([4, 5, 6, 7, 8, 9, 10, 15, 16, 17, 18, 19, 20, 21])
+    ocp.constraints.idxbu = np.array(idxbu_op + idxbu_pe)
 
-    ocp.parameter_values = np.zeros(8)
+    ocp.parameter_values = np.zeros(n_p)
 
     ocp.solver_options.qp_solver = 'PARTIAL_CONDENSING_HPIPM'
     ocp.solver_options.hessian_approx = 'GAUSS_NEWTON'
@@ -402,7 +464,7 @@ def create_lipm_ocp(
     # ocp.solver_options.qp_solver_warm_start = 1
     ocp.solver_options.globalization = 'MERIT_BACKTRACKING' # performs a merit function based backtracking line search following
     ocp.solver_options.levenberg_marquardt = 1e-4   # regolarization for the hessian diagonal elements
-    tol = 1e-5
+    tol = 1e-4
     ocp.solver_options.nlp_solver_tol_stat = tol   # NLP solver stationarity tolerance. Type: float > 0 Default: 1e-6
     ocp.solver_options.nlp_solver_tol_eq = tol     # NLP solver equality tolerance
     ocp.solver_options.nlp_solver_tol_ineq = tol   # NLP solver inequality tolerance
@@ -410,5 +472,11 @@ def create_lipm_ocp(
 
 
 
+    # Automatically export c_generated_code to cpp work space
+    ocp.code_export_directory = '../../mpc_cpp_acados/c_generated_code'
 
-    return AcadosOcpSolver(ocp)
+
+
+
+
+    return AcadosOcpSolver(ocp, json_file='acados_ocp.json')

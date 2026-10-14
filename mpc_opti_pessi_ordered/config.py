@@ -11,10 +11,10 @@ class RobotConfig:
     Iz: float = 1.048       # kg/m^2
     off_x: float = 0.2407   # m
     off_y: float = 0.134    # m
-    mu: float = 0.8         # 
+    mu: float = 0.6         # 
     max_ext_sq: float = 0.3**2 # m: Leg extension limit squared
     # Initial state
-    x_init: np.ndarray = np.array([-0.8, -0.5]) # m
+    x_init: np.ndarray = np.array([0.0, 0.0]) # m
     theta_init: float = np.deg2rad(0) # deg
 
 
@@ -51,7 +51,7 @@ class SimulationConfig:
     N_horizon: int = 7
     sim_steps: int = 200
     steps_per_phase: int = 1
-    c_target: np.ndarray = np.array([1, 0.2]) # Target position
+    c_target: np.ndarray = np.array([10, 0.0]) # Target position
     theta_target: float = np.deg2rad(0)         # Target orientation
     solver_type: str = 'SQP' # SQP, SQP_RTI
     max_iter: int = 4
@@ -62,11 +62,12 @@ class SimulationConfig:
 @dataclass
 class ObstacleConfig:
     # General
+    N_OBS_MAX: int = 3 # max number of obstacles
     pos_init: np.ndarray = np.array([0.1, 1.0]) #np.array([0.1, 1.0])
     r_obs: float = 0.2
     speed: float = 0.5              # actual velocity of the obstacle
     y_dot_max: float = 1         # velocity against which the pessimistic is robust
-    obs_type: str = "circular" # "static", "dynamic", "adversarial", "circular"
+    obs_type: str = "static" # "static", "dynamic", "adversarial", "circular"
     # Dynamic
     top_pos_dyn: np.ndarray = np.array([0.1, 1])
     bot_pos_dyn: np.ndarray = np.array([0.1, -1])
