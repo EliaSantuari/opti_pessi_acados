@@ -14,7 +14,7 @@ class RobotConfig:
     mu: float = 0.8         # 
     max_ext_sq: float = 0.3**2 # m: Leg extension limit squared
     # Initial state
-    x_init: np.ndarray = np.array([0.0, 0.0]) # m
+    x_init: np.ndarray = np.array([-0.8, -0.5]) # m
     theta_init: float = np.deg2rad(0) # deg
 
 
@@ -49,10 +49,23 @@ class SimulationConfig:
     N_horizon: int = 7
     sim_steps: int = 200
     steps_per_phase: int = 1
-    c_target: np.ndarray = np.array([10, 0.0]) # Target position
+    c_target: np.ndarray = np.array([10, 2]) # Target position
     theta_target: float = np.deg2rad(0)         # Target orientation
     solver_type: str = 'SQP' # SQP, SQP_RTI
     max_iter: int = 4
+
+
+def generate_random_obs():
+    start_pos_x = np.random.uniform(-1, 10)
+    start_pos_y = np.random.uniform(-2, 2)
+
+    start_pos = [start_pos_x, start_pos_y]
+
+    radius = np.random.uniform(0.1, 0.4)
+
+    speed = np.random.uniform(0.1, 0.5)
+
+    return start_pos, radius, speed
 
 
 
@@ -60,7 +73,7 @@ class SimulationConfig:
 @dataclass
 class ObstacleConfig:
     # General
-    N_OBS_MAX: int = 1 # max number of obstacles
+    N_OBS_MAX: int = 6 # max number of obstacles
     pos_init: np.ndarray = np.array([0.1, 1.0]) #np.array([0.1, 1.0])
     r_obs: float = 0.2
     speed: float = 0.5              # actual velocity of the obstacle
@@ -71,3 +84,6 @@ class ObstacleConfig:
     bot_pos_dyn: np.ndarray = np.array([0.1, -1])
     # Circular - make a circle around center starting from pos_init
     center: np.ndarray = np.array([1.0, 0.2])
+
+    # RANDOM OBSTACLES
+    corridor_bounds: np.ndarray = np.array([1, 9, -1.0, 1.0])

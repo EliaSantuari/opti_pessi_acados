@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from lipm_model import create_lipm_ocp
 from gait_planner import GaitPlanner
 from visualizer import plot_simulation_results, plot_computational_time, plot_friction_cones
-from config import RobotConfig, MPCWeights, SimulationConfig, ObstacleConfig, Limits
+from config import RobotConfig, MPCWeights, SimulationConfig, ObstacleConfig, Limits, generate_random_obs
 
 from obstacle_manager import ObstacleManager
 
@@ -35,17 +35,18 @@ def main():
     ## Scenario configuration
     obs_manager = ObstacleManager(n_obs_max=N_OBS_MAX)
     # Obstacle bounds
-    corridor_bounds = [2.0, 8.0, -2.0, 2.0]
+    corridor_bounds = obs_cfg.corridor_bounds
 
-
-    obs_manager.add_random_obstacle(start_pos=[3.0, 0.0], radius=0.2, speed=0.3, bounds=corridor_bounds, y_dot_max=obs_cfg.y_dot_max)
-    obs_manager.add_random_obstacle(start_pos=[5.0, 0.0], radius=0.15, speed=0.4, bounds=corridor_bounds, y_dot_max=obs_cfg.y_dot_max)
-    obs_manager.add_random_obstacle(start_pos=[7.0, 0.0], radius=0.2, speed=0.4, bounds=corridor_bounds, y_dot_max=obs_cfg.y_dot_max)
-    obs_manager.add_random_obstacle(start_pos=[6.0, 1.0], radius=0.2, speed=0.4, bounds=corridor_bounds, y_dot_max=obs_cfg.y_dot_max)
+    # Generate randomly N_OBS_MAX obstacles
+    for i in range(N_OBS_MAX):
+        start_pos, radius, speed = generate_random_obs()
+        obs_manager.add_random_obstacle(start_pos, radius, speed, bounds=corridor_bounds, y_dot_max=obs_cfg.y_dot_max)
+        
 
 
 
     active_obstacles = obs_manager.get_active_obstacles()
+
 
 
 
@@ -131,6 +132,8 @@ def main():
 
     dt_chosen = limits.dt_max
 
+    local_target_hist = []
+
 
     print("--- Starting Simulation MPC ---")
 
@@ -139,7 +142,7 @@ def main():
         obs_manager.update_all(dt_chosen)
         active_obstacles = obs_manager.get_active_obstacles()
 
-        history_obs.append([obs['pos'] for obs in active_obstacles])
+        history_obs.append([obs.copy() for obs in active_obstacles])
 
 
 
@@ -169,6 +172,8 @@ def main():
             local_target = X_sim[0:2] + (dir_to_target / dist_to_final) * max_lookahead
         else:
             local_target = sim_cfg.c_target
+
+        local_target_hist.append(local_target)
 
         # Update the reference of the horizon
         yref = np.zeros(34)
@@ -518,10 +523,11 @@ def main():
 
     plot_friction_cones(cone0_hist, cone1_hist, f0_hist, f1_hist)
 
+
     plot_simulation_results(
         history_X, history_U, history_obs, foot_positions_world, 
         (dist_p0_curr, dist_p1_curr, dist_p0_next, dist_p1_next),
-        (sim_cfg.c_target, sim_cfg.theta_target), (obs_cfg.pos_init, obs_cfg.r_obs, obs_cfg.y_dot_max), history_pred_op=history_pred_op, history_pred_pe=history_pred_pe
+        (sim_cfg.c_target, sim_cfg.theta_target), (obs_cfg.pos_init, obs_cfg.r_obs, obs_cfg.y_dot_max), history_pred_op=history_pred_op, history_pred_pe=history_pred_pe, local_target_hist=local_target_hist
     )
 
 
