@@ -400,6 +400,9 @@ def plot_simulation_results(history_X, history_U, history_obs, foot_positions_wo
     
     ani = animate_robot_feet(history_X=history_X, history_obs=history_obs, pred_op=history_pred_op, pred_pe=history_pred_pe, interval=100, tail_frames=10, local_target_hist=local_target_hist)
 
+    fps = int(1000/100)
+    # ani.save("../videos/tests_acados_vs_ocs2/Confronto2/acados.gif", writer="pillow", fps=fps)
+
     plt.tight_layout()
     plt.show()
 

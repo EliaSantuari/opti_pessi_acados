@@ -6,11 +6,9 @@ from gait_planner import GaitPlanner
 from visualizer import plot_simulation_results, plot_computational_time, plot_friction_cones
 from config import RobotConfig, MPCWeights, SimulationConfig, ObstacleConfig, Limits, generate_random_obs
 
-from obstacle_manager import ObstacleManager
+from obstacle_manager import ObstacleManager, RandomObstacle, StaticObstacle, DynamicObstacle, AdversarialObstacle, CircularObstacle
 
 import time
-
-
 
 
 
@@ -37,12 +35,27 @@ def main():
     # Obstacle bounds
     corridor_bounds = obs_cfg.corridor_bounds
 
-    # Generate randomly N_OBS_MAX obstacles
     for i in range(N_OBS_MAX):
-        start_pos, radius, speed = generate_random_obs()
-        obs_manager.add_random_obstacle(start_pos, radius, speed, bounds=corridor_bounds, y_dot_max=obs_cfg.y_dot_max)
+        if obs_cfg.obs_type == "random":
+            start_pos, radius, speed = generate_random_obs()
+            obs = RandomObstacle(start_pos, radius, speed, obs_cfg.corridor_bounds, obs_cfg.y_dot_max)
+            obs_manager.add_obstacle(obs)
         
+        elif obs_cfg.obs_type == "static":
+            obs = StaticObstacle(obs_cfg.pos_init, obs_cfg.r_obs, obs_cfg.y_dot_max)
+            obs_manager.add_obstacle(obs)
 
+        elif obs_cfg.obs_type == "dynamic":
+            obs = DynamicObstacle(obs_cfg.top_pos_dyn, obs_cfg.bot_pos_dyn, obs_cfg.r_obs, obs_cfg.speed, obs_cfg.y_dot_max)
+            obs_manager.add_obstacle(obs)
+
+        elif obs_cfg.obs_type == "adversarial":
+            obs = AdversarialObstacle(obs_cfg.pos_init, obs_cfg.r_obs, obs_cfg.speed, obs_cfg.y_dot_max)
+            obs_manager.add_obstacle(obs)
+
+        elif obs_cfg.obs_type == "circular":
+            obs = CircularObstacle(obs_cfg.pos_init, obs_cfg.center, obs_cfg.r_obs, obs_cfg.speed, obs_cfg.y_dot_max)
+            obs_manager.add_obstacle(obs)
 
 
     active_obstacles = obs_manager.get_active_obstacles()
@@ -139,10 +152,12 @@ def main():
 
     for step in range(sim_cfg.sim_steps):
 
-        obs_manager.update_all(dt_chosen)
+        robot_pos = X_sim[0:2]
+        obs_manager.update_all(dt_chosen, t_global=t_global, robot_pos=robot_pos)
+
         active_obstacles = obs_manager.get_active_obstacles()
 
-        history_obs.append([obs.copy() for obs in active_obstacles])
+        history_obs.append(obs_manager.get_active_obstacles())
 
 
 
@@ -356,7 +371,6 @@ def main():
             
         # ---- Solve the OCP ----
         status = solver.solve()
-
         
         # if status != 0:
             # solver.print_statistics()
